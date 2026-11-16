@@ -41,13 +41,13 @@ export function createWorld(random) {
     state.asteroids.push(a);
   }
   function spawnDrifter() {
-    state.drifters.push({ x: random.pick([0, FIELD.width]), y: random.range(40, FIELD.height - 40), hp: DRIFTER.hp, r: DRIFTER.radius, vx: 0, vy: 0 });
+    state.drifters.push({ x: random.pick([0, FIELD.width]), y: random.range(70, FIELD.height - 40), hp: DRIFTER.hp, r: DRIFTER.radius, vx: 0, vy: 0 });
   }
   function spawnSpitter() {
-    state.spitters.push({ x: random.range(80, FIELD.width - 80), y: random.range(40, 140), hp: SPITTER.hp, r: SPITTER.radius, fireTimer: random.range(1, 2), vx: random.pick([-40, 40]) });
+    state.spitters.push({ x: random.range(80, FIELD.width - 80), y: random.range(70, 160), hp: SPITTER.hp, r: SPITTER.radius, fireTimer: random.range(1, 2), vx: random.pick([-40, 40]) });
   }
   function spawnShard(x, y) {
-    state.shards.push({ x: x ?? random.range(40, FIELD.width - 40), y: y ?? random.range(40, FIELD.height - 40), r: SHARD.radius, pulse: random.range(0, 6.28) });
+    state.shards.push({ x: x ?? random.range(40, FIELD.width - 40), y: y ?? random.range(70, FIELD.height - 40), r: SHARD.radius, pulse: random.range(0, 6.28) });
   }
   function burst(x, y, color, n) {
     for (let i = 0; i < n; i += 1) {
@@ -150,9 +150,10 @@ export function createWorld(random) {
       spawnShard();
     }
 
-    // Player movement + aim.
+    // Player movement + aim. The HUD bar covers the top 52 px, so the ship
+    // stays below it and is never hidden behind the score display.
     p.x = Math.min(FIELD.width - p.radius, Math.max(p.radius, p.x + move.x * state.speed * dt));
-    p.y = Math.min(FIELD.height - p.radius, Math.max(p.radius, p.y + move.y * state.speed * dt));
+    p.y = Math.min(FIELD.height - p.radius, Math.max(56, p.y + move.y * state.speed * dt));
     if (aim) p.angle = Math.atan2(aim.y - p.y, aim.x - p.x);
 
     // Fire bolts.
