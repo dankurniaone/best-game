@@ -1,9 +1,13 @@
-// Rendering: everything the player sees, painted on one canvas. Clarity first:
-// every sprite has a distinct silhouette, a bright outline and a solid fill, so
-// at a glance (and in a small screenshot) the player, each enemy type, shards
-// and bullets are unmistakable. Text is always stroked so it stays sharp over
-// the busy background.
+// Rendering: everything the player sees, painted on one canvas. All game
+// art is real raster sprites from Kenney's "Space Shooter Redux" (CC0),
+// bundled locally in game/assets/ and loaded by assets.js — no more
+// hand-drawn shapes. Every entity has a distinct, detailed sprite, so at a
+// glance (and in a small screenshot) the player, each enemy type, shards and
+// bullets are unmistakable. Text is always stroked so it stays sharp over
+// the busy background. Collision radii and balance are untouched: sprites
+// are drawn bigger than their collision circles (visual only).
 import { FIELD, TOTAL_WAVES } from './config.js';
+import { loadAssets } from './assets.js';
 
 export const SCREEN_TITLE = 'title';
 export const SCREEN_PLAY = 'play';
@@ -17,15 +21,25 @@ export function createRenderer(canvas) {
   canvas.width = FIELD.width;
   canvas.height = FIELD.height;
 
-  // Pre-rendered background: deep navy with soft nebula clouds (kept dim so
-  // sprites stay high-contrast) — painted once, blitted every frame.
-  const bg = document.createElement('canvas');
-  bg.width = FIELD.width;
-  bg.height = FIELD.height;
-  {
-    const b = bg.getContext('2d');
-    b.fillStyle = '#04081a';
-    b.fillRect(0, 0, FIELD.width, FIELD.height);
+  let sprites = null;
+  let bg = null;
+  // Assets load async; main.js awaits `ready` before the first paint, so
+  // draw() never runs before the sprites exist.
+  const ready = loadAssets().then((s) => {
+    sprites = s;
+    bg = buildBackground(s.bg);
+  });
+
+  // Pre-rendered background: the Kenney starfield tile, soft nebula clouds
+  // over it (kept dim so sprites stay high-contrast), and faint baked stars.
+  function buildBackground(tile) {
+    const c = document.createElement('canvas');
+    c.width = FIELD.width;
+    c.height = FIELD.height;
+    const b = c.getContext('2d');
+    for (let x = 0; x < FIELD.width; x += tile.width) {
+      for (let y = 0; y < FIELD.height; y += tile.height) b.drawImage(tile, x, y);
+    }
     const cloud = (x, y, r, color) => {
       const g = b.createRadialGradient(x, y, 0, x, y, r);
       g.addColorStop(0, color);
@@ -37,7 +51,6 @@ export function createRenderer(canvas) {
     cloud(820, 480, 320, 'rgba(8, 74, 110, 0.45)');   // teal, bottom-right
     cloud(780, 110, 240, 'rgba(76, 29, 149, 0.35)');  // violet, top-right
     cloud(120, 520, 220, 'rgba(134, 25, 143, 0.16)'); // magenta, bottom-left
-    // Static faint stars baked in so the field never looks empty.
     const cols = ['#ffffff', '#fde68a', '#bae6fd', '#e2e8f0'];
     for (let i = 0; i < 150; i += 1) {
       const x = ((i * 137.5) % FIELD.width);
@@ -48,6 +61,7 @@ export function createRenderer(canvas) {
       b.beginPath(); b.arc(x, y, r, 0, Math.PI * 2); b.fill();
     }
     b.globalAlpha = 1;
+    return c;
   }
 
   function panel(x, y, w, h, fill) {
@@ -79,59 +93,47 @@ export function createRenderer(canvas) {
     ctx.fillStyle = color;
     ctx.fillText(str, x, y);
   }
+  // Draw a sprite centred at (x, y), rotated so its nose (Kenney sprites
+  // face up) points along `angle`. Width `w`; height follows the aspect.
+  function sprite(img, x, y, angle, w) {
+    const h = (w * img.height) / img.width;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle + Math.PI / 2);
+    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    ctx.restore();
+  }
 
-  // PLAYER — a lantern-ship: long gold arrow hull, white-hot cockpit, twin
-  // wings and an engine flame. Drawn ~1.5x its collision radius so it reads
-  // as a ship, not a dot. Collision stays at radius 16 (fairness unchanged).
+  // PLAYER — Kenney's orange playerShip1, drawn ~2.4x its collision radius
+  // (visual only; collision stays at radius 16). A real engine flame flickers
+  // behind it, animated from the pack's fire frames.
   function drawShip(x, y, angle, invulnerable, shield, time) {
     ctx.save();
     ctx.translate(x, y);
-    ctx.rotate(angle);
+    ctx.rotate(angle + Math.PI / 2);
     if (invulnerable > 0 && Math.floor(invulnerable * 12) % 2 === 0) ctx.globalAlpha = 0.35;
-    ctx.scale(1.45, 1.45);
-    // Engine flame (flickers with time).
-    const flick = 10 + Math.sin(time * 18) * 3;
+    // Engine flame: tail is local +y; the flame sprite points up, so flip it.
+    // Drawn big with a warm glow, so the tail unmistakably reads as "engine on".
+    const flick = 0.85 + 0.25 * Math.sin(time * 18);
+    const flame = sprites.fire[Math.floor(time * 14) % sprites.fire.length];
+    ctx.save();
+    ctx.translate(0, 40);
+    ctx.rotate(Math.PI);
+    ctx.scale(flick, flick);
     ctx.shadowColor = '#fb923c';
-    ctx.shadowBlur = 14;
-    ctx.fillStyle = '#f97316';
-    ctx.beginPath();
-    ctx.moveTo(-14, -5); ctx.lineTo(-14 - flick, 0); ctx.lineTo(-14, 5); ctx.closePath();
-    ctx.fill();
+    ctx.shadowBlur = 18;
+    ctx.drawImage(flame, -13, -26, 26, 52);
     ctx.shadowBlur = 0;
-    // Wings.
-    ctx.fillStyle = '#fbbf24';
-    ctx.strokeStyle = '#78350f';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(-4, -8); ctx.lineTo(-18, -20); ctx.lineTo(-14, -6); ctx.closePath();
-    ctx.moveTo(-4, 8); ctx.lineTo(-18, 20); ctx.lineTo(-14, 6); ctx.closePath();
-    ctx.fill(); ctx.stroke();
-    // Hull: long arrow with a bright rim so it pops off the dark field.
-    ctx.shadowColor = '#fbbf24';
-    ctx.shadowBlur = 20;
-    ctx.fillStyle = '#f59e0b';
-    ctx.strokeStyle = '#fef3c7';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(26, 0); ctx.lineTo(-12, -13); ctx.lineTo(-6, 0); ctx.lineTo(-12, 13); ctx.closePath();
-    ctx.fill(); ctx.stroke();
-    ctx.shadowBlur = 0;
-    // Cockpit: white-hot lantern core.
-    ctx.fillStyle = '#fffbeb';
-    ctx.strokeStyle = '#b45309';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(7, 0, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.restore();
+    ctx.drawImage(sprites.player, -39, -29.5, 78, 59);
     ctx.restore();
     if (shield) {
-      ctx.strokeStyle = '#7dd3fc';
-      ctx.lineWidth = 3;
-      ctx.shadowColor = '#38bdf8';
-      ctx.shadowBlur = 12;
-      ctx.beginPath(); ctx.arc(x, y, 34, 0, Math.PI * 2); ctx.stroke();
-      ctx.shadowBlur = 0;
-      ctx.strokeStyle = 'rgba(125, 211, 252, 0.45)';
+      ctx.globalAlpha = 0.95;
+      ctx.drawImage(sprites.shield, x - 52, y - 42, 104, 84);
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = 'rgba(125, 211, 252, 0.5)';
       ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(x, y, 40, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, 42, 0, Math.PI * 2); ctx.stroke();
     }
   }
 
@@ -180,6 +182,14 @@ export function createRenderer(canvas) {
     text(`SALVAGE ${state.salvage}/${state.quota}`, FIELD.width / 2, 90, 16, '#bae6fd', 'center');
   }
 
+  function meteorFor(a) {
+    // Variant by size; a rock that shrinks when shot drops a size class.
+    if (a.r >= 27) return sprites.meteorBig[Math.floor(a.r) % 2];
+    if (a.r >= 19) return sprites.meteorMed[Math.floor(a.r) % 2];
+    if (a.r >= 13) return sprites.meteorSmall[Math.floor(a.r) % 2];
+    return sprites.meteorTiny[Math.floor(a.r) % 2];
+  }
+
   function drawEntities(state, showShip) {
     ctx.drawImage(bg, 0, 0);
     // Twinkling field stars on top of the nebula.
@@ -189,119 +199,40 @@ export function createRenderer(canvas) {
       ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
     }
     ctx.globalAlpha = 1;
-    // SHARDS — bright gold diamonds with a white-hot core. The only gold
-    // diamond on screen, so they read instantly as pickups.
+    // SHARDS — Kenney's gold star, pulsing with a warm glow. The only gold
+    // star on screen, so it reads instantly as a pickup.
     for (const s of state.shards) {
-      const r = s.r + 2 + Math.sin(s.pulse) * 2;
-      ctx.shadowColor = '#fde68a'; ctx.shadowBlur = 16;
-      ctx.fillStyle = '#facc15';
-      ctx.strokeStyle = '#fef9c3';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(s.x, s.y - r); ctx.lineTo(s.x + r * 0.72, s.y); ctx.lineTo(s.x, s.y + r); ctx.lineTo(s.x - r * 0.72, s.y);
-      ctx.closePath(); ctx.fill(); ctx.stroke();
+      const w = 30 * (1 + 0.12 * Math.sin(s.pulse));
+      ctx.shadowColor = '#fde68a';
+      ctx.shadowBlur = 14;
+      ctx.drawImage(sprites.shard, s.x - w / 2, s.y - (w * sprites.shard.height / sprites.shard.width) / 2, w, w * sprites.shard.height / sprites.shard.width);
       ctx.shadowBlur = 0;
-      ctx.fillStyle = '#fffbeb';
-      ctx.beginPath();
-      ctx.moveTo(s.x, s.y - r * 0.45); ctx.lineTo(s.x + r * 0.32, s.y); ctx.lineTo(s.x, s.y + r * 0.45); ctx.lineTo(s.x - r * 0.32, s.y);
-      ctx.closePath(); ctx.fill();
     }
-    // ASTEROIDS — dark slate rocks with a thick pale rim and craters, so the
-    // grey body is never lost against the dark field.
+    // ASTEROIDS — detailed Kenney grey meteors in four size classes,
+    // rotating as they drift. Drawn a touch wider than the collision circle.
     for (const a of state.asteroids) {
-      ctx.save();
-      ctx.translate(a.x, a.y); ctx.rotate(a.rot);
-      ctx.fillStyle = '#475569';
-      ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 3;
-      ctx.beginPath();
-      for (let i = 0; i < 9; i += 1) {
-        const ang = (i / 9) * Math.PI * 2;
-        const rr = a.r * (0.8 + 0.2 * Math.sin(i * 2.7 + 1));
-        if (i === 0) ctx.moveTo(Math.cos(ang) * rr, Math.sin(ang) * rr);
-        else ctx.lineTo(Math.cos(ang) * rr, Math.sin(ang) * rr);
-      }
-      ctx.closePath(); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = '#1e293b';
-      ctx.beginPath(); ctx.arc(-a.r * 0.3, -a.r * 0.2, a.r * 0.22, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(a.r * 0.35, a.r * 0.3, a.r * 0.16, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
+      sprite(meteorFor(a), a.x, a.y, a.rot - Math.PI / 2, a.r * 2.1);
     }
-    // DRIFTERS (chasers) — jagged red-orange maw-stars that always face the
-    // player, with white eyes. Nothing else on screen is red or spiky.
-    // Drawn bigger than the collision radius (visual only, fairness unchanged).
+    // DRIFTERS (chasers) — Kenney's red enemy ship, always facing the player.
+    // Nothing else on screen is a red ship.
     for (const d of state.drifters) {
       const ang = Math.atan2(state.player.y - d.y, state.player.x - d.x);
-      const R = d.r + 5;
-      ctx.save();
-      ctx.translate(d.x, d.y); ctx.rotate(ang);
-      ctx.shadowColor = '#f97316'; ctx.shadowBlur = 14;
-      ctx.fillStyle = '#dc2626';
-      ctx.strokeStyle = '#fecaca'; ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      for (let i = 0; i < 12; i += 1) {
-        const a = (i / 12) * Math.PI * 2;
-        const rr = i % 2 === 0 ? R + 6 : R * 0.55;
-        if (i === 0) ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
-        else ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
-      }
-      ctx.closePath(); ctx.fill(); ctx.stroke();
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = '#fff7ed';
-      ctx.beginPath(); ctx.arc(6, -6, 3.5, 0, Math.PI * 2); ctx.arc(6, 6, 3.5, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#7f1d1d';
-      ctx.beginPath(); ctx.arc(7, -6, 1.8, 0, Math.PI * 2); ctx.arc(7, 6, 1.8, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
+      sprite(sprites.drifter, d.x, d.y, ang, 56);
     }
-    // SPITTERS — purple hexagons with a pale rim, a glowing core and a barrel
-    // aimed at the player. The only purple hexagon: the ranged enemy.
-    // Drawn slightly bigger than the collision radius (visual only).
+    // SPITTERS — Kenney's blue enemy ship tinted purple, a different
+    // silhouette from the drifter, facing the player. The only purple ship.
     for (const s of state.spitters) {
       const ang = Math.atan2(state.player.y - s.y, state.player.x - s.x);
-      const R = s.r + 3;
-      ctx.save();
-      ctx.translate(s.x, s.y); ctx.rotate(ang);
-      ctx.shadowColor = '#a855f7'; ctx.shadowBlur = 14;
-      ctx.fillStyle = '#7e22ce';
-      ctx.strokeStyle = '#e9d5ff'; ctx.lineWidth = 3;
-      ctx.beginPath();
-      for (let i = 0; i < 6; i += 1) {
-        const a = (i / 6) * Math.PI * 2;
-        if (i === 0) ctx.moveTo(Math.cos(a) * R, Math.sin(a) * R);
-        else ctx.lineTo(Math.cos(a) * R, Math.sin(a) * R);
-      }
-      ctx.closePath(); ctx.fill(); ctx.stroke();
-      ctx.shadowBlur = 0;
-      // Barrel toward the player.
-      ctx.fillStyle = '#c084fc';
-      ctx.beginPath(); ctx.arc(R * 0.75, 0, 5, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#f0abfc';
-      ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#fdf4ff';
-      ctx.beginPath(); ctx.arc(0, 0, 3.5, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
+      sprite(sprites.spitter, s.x, s.y, ang, 62);
     }
-    // BOLTS — bright streaks along their velocity, so the firing direction
-    // reads at a glance. Gold core, white-hot centre.
-    ctx.lineCap = 'round';
+    // BOLTS — gold laser bolts along their velocity, so the firing direction
+    // reads at a glance.
     for (const b of state.bolts) {
-      const tx = b.x - b.vx * 0.045;
-      const ty = b.y - b.vy * 0.045;
-      ctx.shadowColor = '#facc15'; ctx.shadowBlur = 10;
-      ctx.strokeStyle = '#fde047'; ctx.lineWidth = 5;
-      ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(b.x, b.y); ctx.stroke();
-      ctx.shadowBlur = 0;
-      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(b.x, b.y); ctx.stroke();
+      sprite(sprites.bolt, b.x, b.y, Math.atan2(b.vy, b.vx), 8);
     }
-    // Enemy orbs — magenta balls with a white core and pale rim.
+    // Enemy orbs — red starburst bolts, small but spiky and unmistakable.
     for (const o of state.orbs) {
-      ctx.shadowColor = '#e879f9'; ctx.shadowBlur = 10;
-      ctx.fillStyle = '#d946ef';
-      ctx.strokeStyle = '#f5d0fe'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = '#fdf4ff';
-      ctx.beginPath(); ctx.arc(o.x, o.y, o.r * 0.45, 0, Math.PI * 2); ctx.fill();
+      ctx.drawImage(sprites.orb, o.x - 11, o.y - 11, 22, 22);
     }
     for (const pt of state.particles) {
       ctx.globalAlpha = Math.max(0, pt.life / pt.max);
@@ -377,7 +308,9 @@ export function createRenderer(canvas) {
   }
 
   return {
+    ready,
     draw(state, screen, best, choices) {
+      if (!sprites || !bg) return;
       if (screen === SCREEN_TITLE) { drawTitle(state, best); return; }
       if (screen === SCREEN_UPGRADE) { drawUpgrade(state, choices ?? []); return; }
       if (screen === SCREEN_OVER || screen === SCREEN_VICTORY) { drawEnd(state, best, screen === SCREEN_VICTORY); return; }

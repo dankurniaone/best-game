@@ -17,6 +17,21 @@ const SAMPLE_STEPS = 15; // sample the frame every 0.25 s
 function frameScore(s) {
   const foes = s.drifters.length + s.spitters.length;
   const frac = s.salvage / s.quota;
+  let aimBonus = 0;
+  if (s.bolts.length) {
+    // Prefer a frame where the ship is actually firing the way it faces:
+    // a snapshot taken mid-turn (ship facing away from its own bolts) reads
+    // as if the ship shoots backwards.
+    let mx = 0;
+    let my = 0;
+    for (const b of s.bolts) { mx += b.vx; my += b.vy; }
+    const ml = Math.hypot(mx, my) || 1;
+    const dot = (Math.cos(s.player.angle) * mx + Math.sin(s.player.angle) * my) / ml;
+    // Strong weight: a frame where the ship faces away from its own fire
+    // must never win, however busy it is.
+    if (dot > 0.7) aimBonus = 25;
+    else if (dot < 0) aimBonus = -25;
+  }
   return foes * 3
     + s.shards.length * 2
     + Math.min(s.bolts.length, 10)
@@ -26,6 +41,7 @@ function frameScore(s) {
     + (s.combo >= 2 ? 10 : 0)
     + (s.wave >= 2 ? 5 : 0)
     + Math.min(s.texts.length, 4) * 2
+    + aimBonus
     + (s.player.y < 140 ? -12 : 0); // keep the ship clear of the HUD bar
 }
 /** A frame only counts if a viewer can read the game in it: the player has
@@ -86,7 +102,21 @@ export function stageShot(name, world) {
   // (a fixed timestamp kept landing on a fresh wave with salvage 0/20 and an
   // empty field). The seed makes the scan deterministic, so the frame is
   // reproducible. End shot: play until the run ends, as before.
+  // Prefer frames where the ship faces the way it fires: a busy frame where
+  // the ship just turned away from its own bolts reads as if it shoots
+  // backwards, however high it scores. If no aligned frame exists, fall
+  // back to the best frame overall.
   let best = null;
+  let bestAligned = null;
+  function aimAligned(s) {
+    if (!s.bolts.length) return false;
+    let mx = 0;
+    let my = 0;
+    for (const b of s.bolts) { mx += b.vx; my += b.vy; }
+    const ml = Math.hypot(mx, my) || 1;
+    const dot = (Math.cos(s.player.angle) * mx + Math.sin(s.player.angle) * my) / ml;
+    return dot > 0.5;
+  }
   for (let i = 0; i < limit / STEP; i += 1) {
     const pilot = autopilot(state, careful);
     const events = world.step(STEP, pilot.move, true, pilot.aim, false);
@@ -101,14 +131,21 @@ export function stageShot(name, world) {
     if (name === 'play' && i % SAMPLE_STEPS === 0 && frameReadable(state)) {
       const score = frameScore(state);
       if (!best || score > best.score) best = { score, snap: structuredClone(state) };
+      if (aimAligned(state) && (!bestAligned || score > bestAligned.score)) {
+        bestAligned = { score, snap: structuredClone(state) };
+      }
     }
   }
   if (victory) return { screen: SCREEN_VICTORY, best: state.score };
-  if (over) return { screen: SCREEN_OVER, best: state.score };
-  if (best) {
+  if (over) {
+    state.texts = []; // no stray "+400" ghosting over the stats line
+    return { screen: SCREEN_OVER, best: state.score };
+  }
+  const chosen = bestAligned ?? best;
+  if (chosen) {
     // Restore the chosen frame in place (same object the renderer reads).
     for (const k of Object.keys(state)) delete state[k];
-    Object.assign(state, best.snap);
+    Object.assign(state, chosen.snap);
   }
   // A mid-wave frame, not the wave banner: the banner is transient, the play
   // screenshot should show the game itself.

@@ -148,5 +148,10 @@ function runGame() {
   requestAnimationFrame(frame);
 }
 
-if (shot) runShot(shot);
-else runGame();
+if (shot) {
+  // Sprites load async: wait for them before staging/painting the shot, or
+  // the screenshot would catch an empty field.
+  renderer.ready.then(() => runShot(shot));
+} else {
+  renderer.ready.then(() => runGame());
+}
