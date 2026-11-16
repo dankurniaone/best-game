@@ -41,7 +41,10 @@ function runShot(name) {
   function paint() {
     renderer.draw(world.state, scene.screen, scene.best, []);
     painted += 1;
-    if (painted < 2) requestAnimationFrame(paint);
+    // 24 paints, not 2: the end screen's stats pop in over its first 16
+    // frames, so a staged end shot must catch them fully in. Deterministic
+    // — the count is fixed, and nothing in the frame depends on wall time.
+    if (painted < 24) requestAnimationFrame(paint);
     else window.__shotReady = true;
   }
   requestAnimationFrame(paint);

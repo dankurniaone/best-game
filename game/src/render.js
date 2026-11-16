@@ -45,9 +45,10 @@ export function createRenderer(canvas) {
   });
 
   // Pre-rendered background: the Kenney starfield tile, pulled toward
-  // space black (#0a0c10) with a dark overlay, two very dim clouds only —
-  // no purple/magenta neon — and faint baked stars. Dim on purpose: the
-  // field must never out-shout the gold accent or the sprites.
+  // space black (#0a0c10) with a dark overlay, warm amber clouds only — no
+  // purple/blue nebula — a large ringed planet low on the horizon for depth,
+  // and faint baked stars. Dim on purpose: the field must never out-shout
+  // the gold accent or the sprites.
   function buildBackground(tile) {
     const c = document.createElement('canvas');
     c.width = FIELD.width * SS;
@@ -60,6 +61,33 @@ export function createRenderer(canvas) {
     // Pull the blue tile toward space black.
     b.fillStyle = 'rgba(10, 12, 16, 0.55)';
     b.fillRect(0, 0, FIELD.width, FIELD.height);
+    // A distant ringed planet, mostly below the horizon: a dark disc with a
+    // thin gold-lit rim and a faint ring, so the void has somewhere to be.
+    // It sits low enough that the playfield stays clean, high enough that
+    // the rim and ring read in the bottom-right of a still frame.
+    const px = 830;
+    const py = 615;
+    const pr = 200;
+    b.save();
+    b.beginPath(); b.arc(px, py, pr, 0, Math.PI * 2); b.clip();
+    const pg = b.createRadialGradient(px - 60, py - 90, 20, px, py, pr);
+    pg.addColorStop(0, '#232c42');
+    pg.addColorStop(0.7, '#161d2e');
+    pg.addColorStop(1, '#0a0c10');
+    b.fillStyle = pg;
+    b.fillRect(px - pr, py - pr, pr * 2, pr * 2);
+    // Banding, barely there: darker horizontal stripes across the disc.
+    b.fillStyle = 'rgba(10, 12, 16, 0.25)';
+    for (let i = 0; i < 4; i += 1) b.fillRect(px - pr, py - 70 + i * 46, pr * 2, 14);
+    b.restore();
+    b.strokeStyle = 'rgba(253, 230, 138, 0.5)';
+    b.lineWidth = 2;
+    b.beginPath(); b.arc(px, py, pr, Math.PI * 1.05, Math.PI * 1.95); b.stroke();
+    // The ring: a tilted ellipse, gold, faint — only the arc that clears
+    // the horizon is visible.
+    b.strokeStyle = 'rgba(251, 191, 36, 0.38)';
+    b.lineWidth = 5;
+    b.beginPath(); b.ellipse(px, py, pr * 1.45, pr * 0.32, -0.35, Math.PI * 1.08, Math.PI * 1.92); b.stroke();
     const cloud = (x, y, r, color) => {
       const g = b.createRadialGradient(x, y, 0, x, y, r);
       g.addColorStop(0, color);
@@ -67,8 +95,9 @@ export function createRenderer(canvas) {
       b.fillStyle = g;
       b.fillRect(x - r, y - r, r * 2, r * 2);
     };
-    cloud(180, 120, 300, 'rgba(49, 46, 129, 0.22)');   // indigo, top-left
-    cloud(820, 480, 320, 'rgba(8, 74, 110, 0.18)');   // teal, bottom-right
+    cloud(180, 120, 300, 'rgba(245, 158, 11, 0.10)');   // amber, top-left
+    cloud(820, 480, 320, 'rgba(251, 146, 60, 0.08)');   // orange, bottom-right
+    cloud(700, 110, 220, 'rgba(253, 230, 138, 0.05)');  // faint gold, top-right
     const cols = ['#ffffff', '#fde68a', '#e2e8f0', '#cbd5e1'];
     for (let i = 0; i < 150; i += 1) {
       const x = ((i * 137.5) % FIELD.width);
@@ -121,6 +150,54 @@ export function createRenderer(canvas) {
     ctx.rotate(angle + Math.PI / 2);
     ctx.drawImage(img, -w / 2, -h / 2, w, h);
     ctx.restore();
+  }
+  // Three-layer parallax starfield, driven by game time (deterministic for
+  // staged shots): far stars tiny and slow, near stars bigger, brighter and
+  // faster, a few gold. The field drifts downward, so even a still frame
+  // reads as motion. Positions are a fixed hash of the index — no RNG, no
+  // state — so the layers cost nothing and can never desync a replay.
+  function parallax(time) {
+    const layers = [
+      { n: 70, r: 1.0, speed: 6, alpha: 0.35 },
+      { n: 40, r: 1.7, speed: 16, alpha: 0.6 },
+      { n: 18, r: 2.6, speed: 30, alpha: 0.9 },
+    ];
+    for (let li = 0; li < layers.length; li += 1) {
+      const L = layers[li];
+      for (let i = 0; i < L.n; i += 1) {
+        const x = (i * 97.31 + li * 211.7) % FIELD.width;
+        const y = ((i * 57.73 + li * 131.1) + time * L.speed) % FIELD.height;
+        ctx.globalAlpha = L.alpha * (0.7 + 0.3 * Math.sin(time * 2 + i));
+        ctx.fillStyle = i % 9 === 0 ? '#fde68a' : '#e2e8f0';
+        ctx.beginPath(); ctx.arc(x, y, L.r, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+  // Hit-flash: a warm glow blooming over a foe the moment a bolt lands.
+  function flashOverlay(x, y, r, flash) {
+    if (!flash || flash <= 0) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = Math.min(1, flash * 6);
+    ctx.fillStyle = '#fde68a';
+    ctx.beginPath(); ctx.arc(x, y, r * 1.15, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  // A keyboard key cap: dark chip, gold edge, mono label. Used on the
+  // title screen so the controls read as real keys, not a line of prose.
+  function keyCap(x, y, label) {
+    ctx.font = `bold 15px ${FONT_MONO}`;
+    const w = ctx.measureText(label).width + 18;
+    ctx.fillStyle = 'rgba(30, 41, 59, 0.95)';
+    ctx.strokeStyle = 'rgba(245, 158, 11, 0.7)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(x, y - 13, w, 26, 6);
+    ctx.fill();
+    ctx.stroke();
+    text(label, x + w / 2, y + 1, 15, '#fde68a', 'center', 'bold', true);
+    return w;
   }
 
   // PLAYER — Kenney's orange playerShip1, drawn ~2.4x its collision radius
@@ -230,8 +307,14 @@ export function createRenderer(canvas) {
   }
 
   function drawEntities(state, showShip) {
-    ctx.drawImage(bg, 0, 0);
-    // Twinkling field stars on top of the nebula.
+    // The background canvas is supersampled (1920x1200) while the context
+    // already carries the 2x transform: blit it into the logical rect, or
+    // only its top-left quarter would ever show (a real bug the planet
+    // exposed — it lives in the bottom-right quadrant of the bg canvas).
+    ctx.drawImage(bg, 0, 0, FIELD.width, FIELD.height);
+    // Parallax starfield over the baked background, then the twinkling
+    // field stars the world owns.
+    parallax(state.time);
     for (const s of state.stars) {
       ctx.globalAlpha = 0.5 + 0.4 * Math.sin(s.tw);
       ctx.fillStyle = '#e2e8f0';
@@ -251,18 +334,22 @@ export function createRenderer(canvas) {
     // rotating as they drift. Drawn a touch wider than the collision circle.
     for (const a of state.asteroids) {
       sprite(meteorFor(a), a.x, a.y, a.rot - Math.PI / 2, a.r * 2.1);
+      flashOverlay(a.x, a.y, a.r, a.flash);
     }
     // DRIFTERS (chasers) — Kenney's red enemy ship, always facing the player.
     // Nothing else on screen is a red ship.
     for (const d of state.drifters) {
       const ang = Math.atan2(state.player.y - d.y, state.player.x - d.x);
       sprite(sprites.drifter, d.x, d.y, ang, 56);
+      flashOverlay(d.x, d.y, d.r, d.flash);
     }
-    // SPITTERS — Kenney's blue enemy ship tinted purple, a different
-    // silhouette from the drifter, facing the player. The only purple ship.
+    // SPITTERS — Kenney's blue enemy ship tinted gold, a different
+    // silhouette from the drifter, facing the player. The only gold ship
+    // besides the player's own lantern.
     for (const s of state.spitters) {
       const ang = Math.atan2(state.player.y - s.y, state.player.x - s.x);
       sprite(sprites.spitter, s.x, s.y, ang, 62);
+      flashOverlay(s.x, s.y, s.r, s.flash);
     }
     // BOLTS — gold laser bolts along their velocity, so the firing direction
     // reads at a glance.
@@ -273,19 +360,53 @@ export function createRenderer(canvas) {
     for (const o of state.orbs) {
       ctx.drawImage(sprites.orb, o.x - 11, o.y - 11, 22, 22);
     }
+    // Particles: sparks glow ('lighter' composite) and smoke swells grey as
+    // it fades; engine-trail embers are dimmer and smaller so they read as
+    // exhaust, not explosions.
     for (const pt of state.particles) {
-      ctx.globalAlpha = Math.max(0, pt.life / pt.max);
+      const a = Math.max(0, pt.life / pt.max);
+      const r = pt.grow ? pt.r * (1 + (1 - a) * 1.6) : pt.r;
+      if (pt.smoke) {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = a * 0.35;
+      } else {
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = pt.trail ? a * 0.7 : a;
+      }
       ctx.fillStyle = pt.color;
-      ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2); ctx.fill();
     }
+    ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
     if (showShip !== false) drawShip(state.player.x, state.player.y, state.player.angle, state.player.invulnerable, state.shield, state.time);
     if (showShip !== false) drawHullPips(state);
+    // Muzzle flash: a gold starburst at the gun tip for the split second a
+    // volley leaves the ship, so firing reads even in a still frame.
+    if (showShip !== false && state.muzzle > 0) {
+      const p = state.player;
+      const gx = p.x + Math.cos(p.angle) * 36;
+      const gy = p.y + Math.sin(p.angle) * 36;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = state.muzzle / 0.06;
+      ctx.strokeStyle = '#fde68a';
+      ctx.lineWidth = 3;
+      for (let k = 0; k < 4; k += 1) {
+        const ang = p.angle + (k * Math.PI) / 2;
+        ctx.beginPath();
+        ctx.moveTo(gx + Math.cos(ang) * 4, gy + Math.sin(ang) * 4);
+        ctx.lineTo(gx + Math.cos(ang) * 17, gy + Math.sin(ang) * 17);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#fff7d6';
+      ctx.beginPath(); ctx.arc(gx, gy, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
     // Floating score texts last, on top of everything, so the ship or a foe
-    // can never cover half a number.
+    // can never cover half a number. Damage numbers ride at their own size.
     for (const t of state.texts) {
       ctx.globalAlpha = Math.max(0, t.life);
-      text(t.text, t.x, t.y, 20, t.color, 'center');
+      text(t.text, t.x, t.y, t.size ?? 20, t.color, 'center');
     }
     ctx.globalAlpha = 1;
   }
@@ -294,17 +415,63 @@ export function createRenderer(canvas) {
     drawEntities(state, false);
     ctx.fillStyle = 'rgba(10, 12, 16, 0.55)';
     ctx.fillRect(0, 0, FIELD.width, FIELD.height);
-    text('LUMEN DRIFT', FIELD.width / 2, 130, 72, '#fde68a', 'center');
-    text('— Starlight Salvage —', FIELD.width / 2, 190, 30, '#e2e8f0', 'center');
-    panel(FIELD.width / 2 - 330, 222, 660, 224, 'rgba(10, 12, 16, 0.88)');
-    text('Pilot your lantern-ship through the drifting dark.', FIELD.width / 2, 256, 22, '#e2e8f0', 'center');
-    text('Collect star shards, blast drifters, clear 10 waves.', FIELD.width / 2, 288, 22, '#e2e8f0', 'center');
-    text('WASD / Arrows — fly      Mouse — aim      Click / Space — fire', FIELD.width / 2, 330, 21, '#fde68a', 'center');
-    text('Q — Nova Bomb      P — pause      M — mute', FIELD.width / 2, 362, 21, '#fde68a', 'center');
-    text('Between waves, pick 1 of 3 upgrades.', FIELD.width / 2, 396, 20, '#94a3b8', 'center');
-    text('Lose all hull and the dark wins.', FIELD.width / 2, 424, 20, '#94a3b8', 'center');
-    if (best > 0) text(`BEST SCORE  ${best}`, FIELD.width / 2, 472, 24, '#fde68a', 'center', 'bold', true);
-    text('▶  PRESS SPACE OR CLICK TO START', FIELD.width / 2, 522, 28, '#ffffff', 'center');
+    text('LUMEN DRIFT', FIELD.width / 2, 96, 76, '#fde68a', 'center');
+    // A thin gold rule under the title: the whole screen hangs off it.
+    ctx.fillStyle = '#f59e0b';
+    ctx.fillRect(FIELD.width / 2 - 180, 128, 360, 2);
+    text('— Starlight Salvage —', FIELD.width / 2, 156, 30, '#e2e8f0', 'center');
+    // The ship, showcased: big, centre stage, flame lit, inside a thin
+    // gold ring — the title screen is a poster, and the poster has a hero.
+    const cx = FIELD.width / 2;
+    const cy = 246;
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cx, cy, 96, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+    const flick = 0.85 + 0.25 * Math.sin(state.time * 18);
+    const flame = sprites.fire[Math.floor(state.time * 14) % sprites.fire.length];
+    ctx.save();
+    ctx.translate(cx, cy + 62);
+    ctx.rotate(Math.PI);
+    ctx.scale(flick, flick);
+    ctx.shadowColor = '#fb923c';
+    ctx.shadowBlur = 18;
+    ctx.drawImage(flame, -13, -26, 26, 52);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+    ctx.drawImage(sprites.player, cx - 65, cy - 49, 130, 98);
+    panel(FIELD.width / 2 - 330, 356, 660, 148, 'rgba(10, 12, 16, 0.88)');
+    text('Pilot your lantern-ship through the drifting dark.', FIELD.width / 2, 386, 22, '#e2e8f0', 'center');
+    text('Collect star shards, blast drifters, clear 10 waves.', FIELD.width / 2, 416, 22, '#e2e8f0', 'center');
+    // Controls as real key caps, two rows, centred as a group.
+    const row1 = [['WASD', 'fly'], ['MOUSE', 'aim'], ['CLICK / SPACE', 'fire']];
+    const row2 = [['Q', 'nova'], ['P', 'pause'], ['M', 'mute']];
+    function capRow(items, y) {
+      const widths = items.map(([k]) => {
+        ctx.font = `bold 15px ${FONT_MONO}`;
+        return ctx.measureText(k).width + 18;
+      });
+      const labels = items.map(([, l]) => l);
+      const labelW = labels.map((l) => {
+        ctx.font = `bold 15px ${FONT_SANS}`;
+        return ctx.measureText(l).width;
+      });
+      let total = 0;
+      for (let i = 0; i < items.length; i += 1) total += widths[i] + 8 + labelW[i] + 26;
+      total -= 26;
+      let x = FIELD.width / 2 - total / 2;
+      for (let i = 0; i < items.length; i += 1) {
+        x += keyCap(x, y, items[i][0]);
+        text(items[i][1], x + 8, y + 1, 15, '#cbd5e1', 'left');
+        x += 8 + labelW[i] + 26;
+      }
+    }
+    capRow(row1, 452);
+    capRow(row2, 484);
+    if (best > 0) text(`BEST SCORE  ${best}`, FIELD.width / 2, 528, 24, '#fde68a', 'center', 'bold', true);
+    text('▶  PRESS SPACE OR CLICK TO START', FIELD.width / 2, 564, 28, '#ffffff', 'center');
   }
 
   function drawUpgrade(state, choices) {
@@ -336,22 +503,49 @@ export function createRenderer(canvas) {
     ctx.fillStyle = 'rgba(10, 12, 16, 0.62)';
     ctx.fillRect(0, 0, FIELD.width, FIELD.height);
     if (victory) {
-      text('★  STARLIGHT RESTORED!  ★', FIELD.width / 2, 170, 52, '#fde68a', 'center');
-      text('You cleared all 10 waves. The drift is safe again.', FIELD.width / 2, 230, 24, '#e2e8f0', 'center');
+      text('★  STARLIGHT RESTORED!  ★', FIELD.width / 2, 130, 52, '#fde68a', 'center');
+      text('You cleared all 10 waves. The drift is safe again.', FIELD.width / 2, 186, 24, '#e2e8f0', 'center');
     } else {
-      text('GAME OVER', FIELD.width / 2, 170, 64, '#f87171', 'center');
-      text('The dark swallowed your lantern… this time.', FIELD.width / 2, 230, 24, '#e2e8f0', 'center');
+      text('GAME OVER', FIELD.width / 2, 130, 64, '#f87171', 'center');
+      text('The dark swallowed your lantern… this time.', FIELD.width / 2, 186, 24, '#e2e8f0', 'center');
     }
-    text(`SCORE  ${state.score}`, FIELD.width / 2, 300, 36, '#ffffff', 'center', 'bold', true);
-    text(`BEST  ${Math.max(best, state.score)}`, FIELD.width / 2, 348, 26, '#fde68a', 'center', 'bold', true);
-    text(`Waves cleared: ${victory ? 10 : state.wave - 1}    Foes destroyed: ${state.kills}    Shards: ${state.shardsCollected}`, FIELD.width / 2, 392, 22, '#e2e8f0', 'center', 'bold', true);
-    text('▶  PRESS SPACE OR CLICK TO PLAY AGAIN', FIELD.width / 2, 470, 28, '#ffffff', 'center');
+    // The stats pop in over the first 16 frames on this screen (the
+    // screenshot runner paints 24 frames, so a staged end shot always
+    // catches them fully in). BEST gets its own gold-framed panel.
+    const ease = Math.min(1, screenFrames / 16);
+    const rise = (1 - ease) * 12;
+    ctx.save();
+    ctx.globalAlpha = ease;
+    text(`SCORE  ${state.score}`, FIELD.width / 2, 246 + rise, 40, '#ffffff', 'center', 'bold', true);
+    panel(FIELD.width / 2 - 150, 272 + rise, 300, 56, 'rgba(245, 158, 11, 0.14)');
+    text(`BEST  ${Math.max(best, state.score)}`, FIELD.width / 2, 301 + rise, 26, '#fde68a', 'center', 'bold', true);
+    const stats = [
+      ['WAVES CLEARED', String(victory ? 10 : state.wave - 1)],
+      ['FOES DESTROYED', String(state.kills)],
+      ['SHARDS', String(state.shardsCollected)],
+    ];
+    stats.forEach(([label, value], i) => {
+      const x = 60 + i * 300;
+      panel(x, 356 + rise, 280, 96, 'rgba(10, 12, 16, 0.92)');
+      text(label, x + 140, 388 + rise, 15, '#94a3b8', 'center', 'bold', true);
+      text(value, x + 140, 424 + rise, 34, '#fde68a', 'center', 'bold', true);
+    });
+    ctx.restore();
+    text('▶  PRESS SPACE OR CLICK TO PLAY AGAIN', FIELD.width / 2, 512, 28, '#ffffff', 'center');
   }
+
+  // Frames spent on the current screen: the end screen's stats pop in over
+  // its first 16 frames. Render-side only — it never touches world state,
+  // so it cannot desync a replay or a staged shot.
+  let screenFrames = 0;
+  let lastScreen = null;
 
   return {
     ready,
     draw(state, screen, best, choices) {
       if (!sprites || !bg) return;
+      if (screen !== lastScreen) { screenFrames = 0; lastScreen = screen; }
+      screenFrames += 1;
       // Logical coordinates everywhere: the 2x transform maps them to the
       // supersampled backing store. (canvas.width resets the transform, so
       // re-apply it every frame.)
@@ -359,7 +553,22 @@ export function createRenderer(canvas) {
       if (screen === SCREEN_TITLE) { drawTitle(state, best); return; }
       if (screen === SCREEN_UPGRADE) { drawUpgrade(state, choices ?? []); return; }
       if (screen === SCREEN_OVER || screen === SCREEN_VICTORY) { drawEnd(state, best, screen === SCREEN_VICTORY); return; }
+      // Screen shake, play screens only: a short deterministic wobble while
+      // the shake timer runs (hit or Nova). Time-driven, so a staged frame
+      // is reproducible. It must not apply to title/end — time is frozen
+      // there, so the offset would stick instead of decaying.
+      if (state.shake > 0) {
+        ctx.translate(Math.sin(state.time * 91) * 14 * state.shake, Math.cos(state.time * 83) * 14 * state.shake);
+      }
       drawEntities(state);
+      // Nova flash: a gold bloom centred on the ship, fading with the timer.
+      if (state.novaFlash > 0) {
+        const g = ctx.createRadialGradient(state.player.x, state.player.y, 0, state.player.x, state.player.y, 420);
+        g.addColorStop(0, `rgba(251, 191, 36, ${0.4 * state.novaFlash})`);
+        g.addColorStop(1, 'rgba(251, 191, 36, 0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, FIELD.width, FIELD.height);
+      }
       drawHud(state, best);
       if (state.waveBanner > 0) {
         // Dark pill behind the banner so it reads over the action.

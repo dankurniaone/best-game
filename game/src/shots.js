@@ -8,7 +8,7 @@ import { EVENT_OVER, EVENT_VICTORY, EVENT_WAVE_CLEAR } from './world.js';
 import { SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE, SCREEN_VICTORY } from './render.js';
 
 const START_SECONDS = 4;
-const PLAY_LIMIT_SECONDS = 75;
+const PLAY_LIMIT_SECONDS = 150; // long enough to reach the busy late waves
 const END_LIMIT_SECONDS = 600;
 const SAMPLE_STEPS = 15; // sample the frame every 0.25 s
 
@@ -59,10 +59,11 @@ function frameScore(s) {
   return foes * 3
     + s.shards.length * 2
     + Math.min(s.bolts.length, 10)
-    + Math.min(s.particles.length, 20) * 0.3
+    + Math.min(s.particles.length, 30) * 0.3
     + (s.salvage > 0 ? 20 : 0)
     + (frac >= 0.3 && frac <= 0.9 ? 8 : 0) // mid-wave: progress visible, not just cleared
     + (s.combo >= 2 ? 10 : 0)
+    + (s.wave >= 6 ? 12 : s.wave >= 5 ? 6 : 0) // late waves are the battle, not the stroll
     + (s.wave >= 2 ? 5 : 0)
     + Math.min(s.texts.length, 4) * 2
     + aimBonus
@@ -71,12 +72,20 @@ function frameScore(s) {
 }
 /** A frame only counts if a viewer can read the game in it: the player has
  * made progress, both enemy kinds are around, shards and bolts are visible,
- * and the ship is inside the frame — not parked on an edge or under the HUD. */
+ * the ship is inside the frame — not parked on an edge or under the HUD —
+ * and the frame is DENSE: enough entities on screen at once, plus visible
+ * juice — a real particle burst (a kill, not just the engine trail) or a
+ * floating score/damage popup. A sparse frame is rejected outright, however
+ * well composed it is. */
 function frameReadable(s) {
+  const entities = s.drifters.length + s.spitters.length + s.asteroids.length
+    + s.shards.length + s.bolts.length + s.orbs.length;
   return s.salvage > 0
     && s.drifters.length + s.spitters.length >= 2
     && s.shards.length >= 3
     && s.bolts.length >= 2
+    && entities >= 14
+    && (s.particles.length >= 25 || s.texts.length >= 1)
     && s.player.x > 160 && s.player.x < 820
     && s.player.y > 170 && s.player.y < 520;
 }
