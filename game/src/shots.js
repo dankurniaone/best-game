@@ -8,9 +8,34 @@ import { EVENT_OVER, EVENT_VICTORY, EVENT_WAVE_CLEAR } from './world.js';
 import { SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE, SCREEN_VICTORY } from './render.js';
 
 const START_SECONDS = 4;
-const PLAY_SECONDS = 34;
+const PLAY_LIMIT_SECONDS = 75;
 const END_LIMIT_SECONDS = 600;
-const SAMPLE = 1 / 30;
+const SAMPLE_STEPS = 15; // sample the frame every 0.25 s
+
+/** How readable/exciting a frame is: foes, shards, bolts and particles on
+ * screen, plus real progress (salvage > 0, combo going). */
+function frameScore(s) {
+  const foes = s.drifters.length + s.spitters.length;
+  const frac = s.salvage / s.quota;
+  return foes * 3
+    + s.shards.length * 2
+    + Math.min(s.bolts.length, 10)
+    + Math.min(s.particles.length, 20) * 0.3
+    + (s.salvage > 0 ? 20 : 0)
+    + (frac >= 0.3 && frac <= 0.9 ? 8 : 0) // mid-wave: progress visible, not just cleared
+    + (s.combo >= 2 ? 10 : 0)
+    + (s.wave >= 2 ? 5 : 0)
+    + Math.min(s.texts.length, 4) * 2
+    + (s.player.y < 140 ? -12 : 0); // keep the ship clear of the HUD bar
+}
+/** A frame only counts if a viewer can read the game in it: the player has
+ * made progress, both enemy kinds are around, shards and bolts are visible. */
+function frameReadable(s) {
+  return s.salvage > 0
+    && s.drifters.length + s.spitters.length >= 2
+    && s.shards.length >= 3
+    && s.bolts.length >= 2;
+}
 
 function nearest(list, x, y) {
   let best = null;
@@ -50,12 +75,18 @@ export function stageShot(name, world) {
   const state = world.state;
   if (name !== 'play' && name !== 'end') {
     for (let i = 0; i < START_SECONDS / STEP; i += 1) world.step(STEP, { x: 0, y: 0 }, false, null, false);
+    state.texts = []; // no stray "+50" peeking out from behind the title panel
     return { screen: SCREEN_TITLE, best: 0 };
   }
   const careful = name === 'play';
-  const limit = name === 'end' ? END_LIMIT_SECONDS : PLAY_SECONDS;
+  const limit = name === 'end' ? END_LIMIT_SECONDS : PLAY_LIMIT_SECONDS;
   let over = false;
   let victory = false;
+  // Play shot: scan the run and keep the most readable, action-packed frame
+  // (a fixed timestamp kept landing on a fresh wave with salvage 0/20 and an
+  // empty field). The seed makes the scan deterministic, so the frame is
+  // reproducible. End shot: play until the run ends, as before.
+  let best = null;
   for (let i = 0; i < limit / STEP; i += 1) {
     const pilot = autopilot(state, careful);
     const events = world.step(STEP, pilot.move, true, pilot.aim, false);
@@ -67,9 +98,18 @@ export function stageShot(name, world) {
       world.applyUpgrade(choices[0]);
       world.startWave(state.wave + 1);
     }
+    if (name === 'play' && i % SAMPLE_STEPS === 0 && frameReadable(state)) {
+      const score = frameScore(state);
+      if (!best || score > best.score) best = { score, snap: structuredClone(state) };
+    }
   }
   if (victory) return { screen: SCREEN_VICTORY, best: state.score };
   if (over) return { screen: SCREEN_OVER, best: state.score };
+  if (best) {
+    // Restore the chosen frame in place (same object the renderer reads).
+    for (const k of Object.keys(state)) delete state[k];
+    Object.assign(state, best.snap);
+  }
   // A mid-wave frame, not the wave banner: the banner is transient, the play
   // screenshot should show the game itself.
   state.waveBanner = 0;

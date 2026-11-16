@@ -57,7 +57,13 @@ export function createWorld(random) {
     }
   }
   function floatText(x, y, text, color) {
-    state.texts.push({ x, y, text, color, life: 1 });
+    // Stack floats apart: rapid pickups (+400, +400, +400) must never print
+    // on top of each other.
+    let yy = y;
+    for (const t of state.texts) {
+      if (Math.abs(t.x - x) < 70 && Math.abs(t.y - yy) < 28) yy -= 28;
+    }
+    state.texts.push({ x, y: yy, text, color, life: 1 });
   }
 
   function startWave(wave) {

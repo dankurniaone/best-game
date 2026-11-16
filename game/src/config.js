@@ -15,12 +15,12 @@ export const PLAYER = {
 };
 
 export const SHARD = {
-  radius: 9,
+  radius: 10,
   baseScore: 50,
   comboWindow: 3,
   maxCombo: 8,
-  spawnInterval: 1.1,
-  maxOnField: 7,
+  spawnInterval: 0.9,
+  maxOnField: 9,
 };
 
 export const ASTEROID = { radiusMin: 14, radiusMax: 34, speedMin: 40, speedMax: 110 };
