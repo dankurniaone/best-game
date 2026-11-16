@@ -51,13 +51,16 @@ export async function loadAssets() {
     // Red ship with boosted saturation so the chaser reads as clearly red,
     // not brown, against the dark field.
     drifter: tint(get(FILES.drifter), 'saturate(1.7)'),
-    // Blue ship tinted purple, so the ranged enemy keeps its purple identity.
-    spitter: tint(get(FILES.spitter), 'hue-rotate(80deg) saturate(1.5)'),
+    // Blue ship, slightly desaturated — a different silhouette from the
+    // red drifter, and its orbs stay warm red.
+    spitter: tint(get(FILES.spitter), 'hue-rotate(80deg) saturate(1.2)'),
     shard: get(FILES.shard),
-    // Blue bolt tinted gold, to match the lantern theme.
-    bolt: tint(get(FILES.boltBlue), 'hue-rotate(195deg) saturate(1.6)'),
+    // Cold blue bolt, untinted: player fire is COLD, enemy fire is WARM
+    // (red orbs) — the two are never confused, even in a busy frame.
+    bolt: get(FILES.boltBlue),
     orb: get(FILES.orb),
-    shield: get(FILES.shield),
+    // Shield tinted gold: the one disciplined accent, not a second blue.
+    shield: tint(get(FILES.shield), 'hue-rotate(195deg) saturate(1.4)'),
     fire: list(FILES.fire),
     bg: get(FILES.bg),
     meteorBig: list(FILES.meteorBig),

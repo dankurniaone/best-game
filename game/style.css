@@ -2,23 +2,23 @@
 * { box-sizing: border-box; }
 body {
   margin: 0;
-  background: #03071a;
+  background: #0a0c10;
   color: #e2e8f0;
-  font-family: "Trebuchet MS", Verdana, sans-serif;
+  font-family: system-ui, "Segoe UI", "Trebuchet MS", Verdana, sans-serif;
 }
 main { max-width: 1000px; margin: 0 auto; padding: 18px 12px 28px; text-align: center; }
 h1 { margin: 4px 0 2px; font-size: 34px; color: #fde68a; letter-spacing: 2px; }
-.tagline { margin: 0 0 14px; font-size: 17px; color: #bae6fd; }
+.tagline { margin: 0 0 14px; font-size: 17px; color: #cbd5e1; }
 canvas {
   display: block;
   width: 960px;
   max-width: 100%;
   height: auto;
   margin: 0 auto;
-  border: 2px solid #38bdf8;
+  border: 2px solid rgba(245, 158, 11, 0.55);
   border-radius: 10px;
-  background: #050a1e;
+  background: #0a0c10;
   cursor: crosshair;
 }
-#status { font-size: 18px; color: #f0abfc; margin: 12px 0 4px; }
+#status { font-size: 18px; color: #fbbf24; margin: 12px 0 4px; }
 .controls { font-size: 15px; color: #94a3b8; margin: 4px 0 0; }

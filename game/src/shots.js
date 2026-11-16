@@ -13,7 +13,11 @@ const END_LIMIT_SECONDS = 600;
 const SAMPLE_STEPS = 15; // sample the frame every 0.25 s
 
 /** How readable/exciting a frame is: foes, shards, bolts and particles on
- * screen, plus real progress (salvage > 0, combo going). */
+ * screen, plus real progress (salvage > 0, combo going) — and, since the
+ * last pass, COMPOSITION: the ship must sit in a power zone (lower-left
+ * third, room ahead of it to shoot into), never glued to an edge, and the
+ * action must spread across the whole frame instead of piling up in the
+ * top half while the bottom half sits empty. */
 function frameScore(s) {
   const foes = s.drifters.length + s.spitters.length;
   const frac = s.salvage / s.quota;
@@ -32,6 +36,26 @@ function frameScore(s) {
     if (dot > 0.7) aimBonus = 25;
     else if (dot < 0) aimBonus = -25;
   }
+  // --- composition ---
+  const px = s.player.x;
+  const py = s.player.y;
+  let comp = 0;
+  // Power zone: lower-left third, clear of the HUD and the edges, with
+  // open space ahead (to the right) to shoot into.
+  if (px >= 200 && px <= 480 && py >= 280 && py <= 480) comp += 14;
+  else if (px >= 160 && px <= 560 && py >= 220 && py <= 520) comp += 5;
+  if (px < 150 || px > 820 || py < 170 || py > 530) comp -= 18; // glued to an edge
+  // Spread: count everything visible across the three vertical bands.
+  const all = [...s.drifters, ...s.spitters, ...s.shards, ...s.asteroids];
+  const band = [0, 0, 0];
+  for (const e of all) band[e.y < 220 ? 0 : e.y <= 420 ? 1 : 2] += 1;
+  comp += 6 * band.filter((n) => n >= 2).length; // every populated band pays
+  if (band[2] === 0) comp -= 12; // bottom third empty: half the frame dead
+  if (band[0] > 0.75 * all.length) comp -= 10; // everything piled at the top
+  // Foes half-clipped by an edge read as a mistake in a poster frame.
+  for (const f of [...s.drifters, ...s.spitters]) {
+    if (f.x < 40 || f.x > 920 || f.y < 100 || f.y > 560) comp -= 3;
+  }
   return foes * 3
     + s.shards.length * 2
     + Math.min(s.bolts.length, 10)
@@ -42,15 +66,19 @@ function frameScore(s) {
     + (s.wave >= 2 ? 5 : 0)
     + Math.min(s.texts.length, 4) * 2
     + aimBonus
-    + (s.player.y < 140 ? -12 : 0); // keep the ship clear of the HUD bar
+    + (s.player.y < 140 ? -12 : 0) // keep the ship clear of the HUD bar
+    + comp;
 }
 /** A frame only counts if a viewer can read the game in it: the player has
- * made progress, both enemy kinds are around, shards and bolts are visible. */
+ * made progress, both enemy kinds are around, shards and bolts are visible,
+ * and the ship is inside the frame — not parked on an edge or under the HUD. */
 function frameReadable(s) {
   return s.salvage > 0
     && s.drifters.length + s.spitters.length >= 2
     && s.shards.length >= 3
-    && s.bolts.length >= 2;
+    && s.bolts.length >= 2
+    && s.player.x > 160 && s.player.x < 820
+    && s.player.y > 170 && s.player.y < 520;
 }
 
 function nearest(list, x, y) {
@@ -80,6 +108,18 @@ function autopilot(state, careful) {
       mx -= ((threat.x - p.x) / (d || 1)) * 1.6;
       my -= ((threat.y - p.y) / (d || 1)) * 1.6;
     }
+  }
+  // Composition pull (play staging only — the end shot must keep the
+  // original autopilot or its staged run dies too early): a gentle nudge
+  // away from the very edges so the picked frame is balanced, not a ship
+  // glued to a corner with an empty half-frame behind it. Small on purpose
+  // (0.45): the picker itself rejects edge frames, and a strong pull fights
+  // the shard-seeking and gets the staged ship killed early.
+  if (careful) {
+    if (p.x < 170) mx += 0.45;
+    if (p.x > 790) mx -= 0.45;
+    if (p.y < 190) my += 0.45;
+    if (p.y > 510) my -= 0.45;
   }
   const len = Math.hypot(mx, my) || 1;
   const foe = nearest([...state.drifters, ...state.spitters], p.x, p.y);
