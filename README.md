@@ -24,15 +24,7 @@ node serve.ts
 
 Then open http://localhost:8080 — the game is plain static files under `game/`, no build step, no network.
 
-## Art credits
-
-All in-game sprite art is from **“Space Shooter Redux” by Kenney** (https://kenney.nl/assets/space-shooter-redux), released under **CC0 1.0 Universal (public domain)** — free to use, no attribution required. The pack’s license is kept at `game/assets/LICENSE-kenney.txt`. Sprites used: the orange player ship, red and blue enemy ships (the blue one is tinted purple in-game, the red one’s saturation is boosted), grey meteors, the gold star pickup, laser bolts, the shield ring, engine flames, and the blue starfield background. The blue laser is tinted gold and the blue ship purple at load time; everything else is used as shipped.
-
 ## Layout
-
-- `game/index.html` — page, canvas, HUD text
-- `game/src/assets.js` — loads the Kenney sprite art (local files only, no network) and prepares tinted variants
-- `game/assets/` — the Kenney sprites used, plus `LICENSE-kenney.txt`
 
 - `game/index.html` — page, canvas, HUD text
 - `game/src/config.js` — every tuning number
