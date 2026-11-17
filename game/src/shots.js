@@ -12,6 +12,17 @@ const PLAY_LIMIT_SECONDS = 150; // long enough to reach the busy late waves
 const END_LIMIT_SECONDS = 600;
 const SAMPLE_STEPS = 15; // sample the frame every 0.25 s
 
+/** Entities per quadrant (split at the field centre): a frame whose action
+ * lives in only one or two quadrants reads as half-empty, however busy it
+ * is. Bottom-left was the emptiest quadrant in the last play shot. */
+function quadrants(s) {
+  const q = [0, 0, 0, 0];
+  for (const e of [...s.drifters, ...s.spitters, ...s.asteroids, ...s.shards]) {
+    q[(e.x < 480 ? 0 : 1) + (e.y < 326 ? 0 : 2)] += 1;
+  }
+  return q;
+}
+
 /** How readable/exciting a frame is: foes, shards, bolts and particles on
  * screen, plus real progress (salvage > 0, combo going) — and, since the
  * last pass, COMPOSITION: the ship must sit in a power zone (lower-left
@@ -52,6 +63,11 @@ function frameScore(s) {
   comp += 6 * band.filter((n) => n >= 2).length; // every populated band pays
   if (band[2] === 0) comp -= 12; // bottom third empty: half the frame dead
   if (band[0] > 0.75 * all.length) comp -= 10; // everything piled at the top
+  // Quadrant spread: action in every quadrant, not one corner doing all
+  // the work. Bottom-left was the emptiest quadrant in the last play shot.
+  const quad = quadrants(s);
+  if (quad.every((n) => n >= 1)) comp += 8;
+  comp += 3 * quad.filter((n) => n >= 2).length;
   // Foes half-clipped by an edge read as a mistake in a poster frame.
   for (const f of [...s.drifters, ...s.spitters]) {
     if (f.x < 40 || f.x > 920 || f.y < 100 || f.y > 560) comp -= 3;
@@ -175,6 +191,21 @@ export function stageShot(name, world) {
   let novaFired = false;
   let peakUntil = -1;
   let bestPeak = null;
+  // Multi-kill burst (play shot only): the last frame was a Nova aftermath
+  // with one foe left, so the picker now hunts a window where >=2 foes die
+  // close together AND >=3 foes are still alive — explosions plus a battle,
+  // not one or the other. Kills are tracked by step index in a rolling
+  // 30-step (0.5 s) window: that is the span in which two kill bursts are
+  // both still burning on screen (burst particles live 0.25–1.1 s, score
+  // popups 1.25 s). A 15-step (0.25 s) window was measured first and is
+  // unreachable in real play — 0 occurrences across 5 seeds, because a foe
+  // takes 2–3 bolt hits and kills spread out; the 0.5 s window occurs
+  // naturally (seed 3, wave 8: two kills 15 steps apart, 13 bolts up).
+  // A Nova's mass kill never counts: the log is cleared the step a Nova
+  // fires, so a burst window is always bolt kills.
+  let prevKills = 0;
+  const killLog = [];
+  let bestBurst = null;
   function aimAligned(s) {
     if (!s.bolts.length) return false;
     let mx = 0;
@@ -204,6 +235,37 @@ export function stageShot(name, world) {
       world.applyUpgrade(choices[0]);
       world.startWave(state.wave + 1);
     }
+    // Multi-kill burst tracking (play shot only): log each foe death by
+    // step, drop entries older than 30 steps, and consider the frame only
+    // while >=2 kills sit inside the window, >=3 foes are still alive,
+    // >=10 bolts/orbs are flying, the ship is in frame, and the action
+    // spreads across all four quadrants. The popup check is the visibility
+    // proof: '+150'/'+250' are foe-kill scores, so >=2 of them on screen
+    // means two bursts are actually burning in the frame right now, not
+    // just logged recently. (A shard pickup at combo 3 also prints '+150',
+    // so the popup count alone never proves a burst — the kill log does.)
+    if (name === 'play') {
+      const dk = state.kills - prevKills;
+      prevKills = state.kills;
+      if (useNova) killLog.length = 0;
+      else for (let k = 0; k < dk; k += 1) killLog.push(i);
+      while (killLog.length && killLog[0] <= i - 30) killLog.shift();
+      const killPopups = state.texts.filter((t) => t.text === '+150' || t.text === '+250').length;
+      const foes = state.drifters.length + state.spitters.length;
+      const quad = quadrants(state);
+      if (killLog.length >= 2 && killPopups >= 2 && foes >= 3
+        && state.bolts.length + state.orbs.length >= 10
+        && state.salvage > 0 && state.shards.length >= 2
+        && state.player.x > 160 && state.player.x < 820
+        && state.player.y > 170 && state.player.y < 520
+        && quad.every((n) => n >= 1) && aimAligned(state)) {
+        const burstScore = frameScore(state) + 40 + killLog.length * 10 + killPopups * 8
+          + (state.novaFlash > 0 ? 25 : 0);
+        if (!bestBurst || burstScore > bestBurst.score) {
+          bestBurst = { score: burstScore, snap: structuredClone(state) };
+        }
+      }
+    }
     if (name === 'play' && i <= peakUntil && peakUntil >= 0
       && state.drifters.length + state.spitters.length >= 1
       && state.particles.length >= 40
@@ -229,9 +291,14 @@ export function stageShot(name, world) {
     return { screen: SCREEN_OVER, best: state.score };
   }
   const normalBest = bestAligned ?? best;
-  const chosen = (bestPeak && bestPeak.score > (normalBest?.score ?? 0) + 10)
+  // Priority: a multi-kill burst frame (explosions AND live foes) beats a
+  // Nova peak (explosions, foes cleared) and a normal dense frame (foes,
+  // no burst). If no burst window ever qualified, fall back exactly as
+  // before, so a seed without one still produces the best frame it has.
+  let chosen = (bestPeak && bestPeak.score > (normalBest?.score ?? 0) + 10)
     ? bestPeak
     : normalBest;
+  if (bestBurst) chosen = bestBurst;
   if (chosen) {
     // Restore the chosen frame in place (same object the renderer reads).
     for (const k of Object.keys(state)) delete state[k];

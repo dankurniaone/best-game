@@ -89,14 +89,17 @@ export function createWorld(random) {
     vfxBurst(x, y, '#fde68a', 10, 140, 420, 0.25, 0.6, 1.5, 3);
     vfxBurst(x, y, '#64748b', 6, 8, 40, 0.6, 1.1, 5, 9, true);
   }
-  function floatText(x, y, text, color, size) {
+  function floatText(x, y, text, color, size, life) {
     // Stack floats apart: rapid pickups (+400, +400, +400) must never print
     // on top of each other.
     let yy = y;
     for (const t of state.texts) {
       if (Math.abs(t.x - x) < 70 && Math.abs(t.y - yy) < 28) yy -= 28;
     }
-    state.texts.push({ x, y: yy, text, color, life: 1, size: size ?? 20 });
+    // `life` is how long the text stays fully readable: the default 1 s
+    // (1.25 s on screen, it fades at 0.8/s) is right for score popups, but
+    // a banner like NOVA! needs to survive until a staged frame samples it.
+    state.texts.push({ x, y: yy, text, color, life: life ?? 1, size: size ?? 20 });
   }
 
   function startWave(wave) {
@@ -165,7 +168,9 @@ export function createWorld(random) {
     state.drifters = []; state.spitters = []; state.asteroids = []; state.orbs = [];
     burst(state.player.x, state.player.y, '#fbbf24', 40);
     killBurst(state.player.x, state.player.y);
-    floatText(state.player.x, state.player.y - 60, 'NOVA!', '#fde68a');
+    // Big, bright, long-lived: the last play shot caught NOVA! at life ~0.2
+    // and it read as a dim smudge. Near-white gold, 34 px, 2 s on screen.
+    floatText(state.player.x, state.player.y - 60, 'NOVA!', '#fff7d6', 34, 1.6);
     return EVENT_KILL;
   }
 
