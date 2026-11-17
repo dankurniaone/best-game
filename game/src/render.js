@@ -68,26 +68,58 @@ export function createRenderer(canvas) {
     const px = 830;
     const py = 615;
     const pr = 200;
+    // Atmosphere: a faint gold halo outside the rim, so the disc reads as a
+    // planet with air, not a flat black circle cut out of the sky.
+    const atm = b.createRadialGradient(px, py, pr * 0.9, px, py, pr * 1.25);
+    atm.addColorStop(0, 'rgba(251, 191, 36, 0.10)');
+    atm.addColorStop(1, 'rgba(251, 191, 36, 0)');
+    b.fillStyle = atm;
+    b.fillRect(px - pr * 1.3, py - pr * 1.3, pr * 2.6, pr * 2.6);
     b.save();
     b.beginPath(); b.arc(px, py, pr, 0, Math.PI * 2); b.clip();
     const pg = b.createRadialGradient(px - 60, py - 90, 20, px, py, pr);
-    pg.addColorStop(0, '#232c42');
-    pg.addColorStop(0.7, '#161d2e');
+    pg.addColorStop(0, '#2b3654');
+    pg.addColorStop(0.55, '#1d2740');
+    pg.addColorStop(0.85, '#121a2c');
     pg.addColorStop(1, '#0a0c10');
     b.fillStyle = pg;
     b.fillRect(px - pr, py - pr, pr * 2, pr * 2);
-    // Banding, barely there: darker horizontal stripes across the disc.
-    b.fillStyle = 'rgba(10, 12, 16, 0.25)';
-    for (let i = 0; i < 4; i += 1) b.fillRect(px - pr, py - 70 + i * 46, pr * 2, 14);
+    // Banding, visible now: darker horizontal stripes across the disc.
+    b.fillStyle = 'rgba(10, 12, 16, 0.35)';
+    for (let i = 0; i < 5; i += 1) b.fillRect(px - pr, py - 80 + i * 42, pr * 2, 12);
+    b.fillStyle = 'rgba(253, 230, 138, 0.10)';
+    for (let i = 0; i < 3; i += 1) b.fillRect(px - pr, py - 58 + i * 58, pr * 2, 8);
     b.restore();
-    b.strokeStyle = 'rgba(253, 230, 138, 0.5)';
-    b.lineWidth = 2;
+    b.strokeStyle = 'rgba(253, 230, 138, 0.75)';
+    b.lineWidth = 3;
     b.beginPath(); b.arc(px, py, pr, Math.PI * 1.05, Math.PI * 1.95); b.stroke();
-    // The ring: a tilted ellipse, gold, faint — only the arc that clears
-    // the horizon is visible.
-    b.strokeStyle = 'rgba(251, 191, 36, 0.38)';
-    b.lineWidth = 5;
+    // Two rings: a bold gold one and a fainter wider one, so the planet has
+    // depth instead of a single hairline.
+    b.strokeStyle = 'rgba(251, 191, 36, 0.5)';
+    b.lineWidth = 6;
     b.beginPath(); b.ellipse(px, py, pr * 1.45, pr * 0.32, -0.35, Math.PI * 1.08, Math.PI * 1.92); b.stroke();
+    b.strokeStyle = 'rgba(253, 230, 138, 0.22)';
+    b.lineWidth = 3;
+    b.beginPath(); b.ellipse(px, py, pr * 1.62, pr * 0.4, -0.35, Math.PI * 1.12, Math.PI * 1.88); b.stroke();
+    // A small distant moon, top-left: a pale disc with a soft glow, so the
+    // upper field has somewhere for the eye to land besides black.
+    const mx = 150;
+    const my = 108;
+    const mr = 26;
+    const mg = b.createRadialGradient(mx, my, mr * 0.4, mx, my, mr * 2.2);
+    mg.addColorStop(0, 'rgba(226, 232, 240, 0.16)');
+    mg.addColorStop(1, 'rgba(226, 232, 240, 0)');
+    b.fillStyle = mg;
+    b.fillRect(mx - mr * 2.2, my - mr * 2.2, mr * 4.4, mr * 4.4);
+    const md = b.createRadialGradient(mx - 8, my - 8, 2, mx, my, mr);
+    md.addColorStop(0, '#dbe4f0');
+    md.addColorStop(1, '#8b98ad');
+    b.fillStyle = md;
+    b.beginPath(); b.arc(mx, my, mr, 0, Math.PI * 2); b.fill();
+    b.fillStyle = 'rgba(10, 12, 16, 0.28)';
+    b.beginPath(); b.arc(mx - 8, my + 4, 6, 0, Math.PI * 2); b.fill();
+    b.beginPath(); b.arc(mx + 9, my - 7, 4, 0, Math.PI * 2); b.fill();
+    b.beginPath(); b.arc(mx + 4, my + 11, 3, 0, Math.PI * 2); b.fill();
     const cloud = (x, y, r, color) => {
       const g = b.createRadialGradient(x, y, 0, x, y, r);
       g.addColorStop(0, color);
@@ -98,8 +130,22 @@ export function createRenderer(canvas) {
     cloud(180, 120, 300, 'rgba(245, 158, 11, 0.10)');   // amber, top-left
     cloud(820, 480, 320, 'rgba(251, 146, 60, 0.08)');   // orange, bottom-right
     cloud(700, 110, 220, 'rgba(253, 230, 138, 0.05)');  // faint gold, top-right
+    cloud(430, 330, 380, 'rgba(245, 158, 11, 0.06)');   // amber band, mid-field
+    cloud(120, 470, 260, 'rgba(251, 191, 36, 0.05)');   // faint gold, bottom-left
+    // A diagonal amber nebula band across the middle of the field, so the
+    // centre band never reads as empty black in a still frame.
+    b.save();
+    b.translate(FIELD.width / 2, FIELD.height / 2);
+    b.rotate(-0.28);
+    const band = b.createLinearGradient(0, -70, 0, 70);
+    band.addColorStop(0, 'rgba(245, 158, 11, 0)');
+    band.addColorStop(0.5, 'rgba(245, 158, 11, 0.07)');
+    band.addColorStop(1, 'rgba(245, 158, 11, 0)');
+    b.fillStyle = band;
+    b.fillRect(-FIELD.width, -70, FIELD.width * 2, 140);
+    b.restore();
     const cols = ['#ffffff', '#fde68a', '#e2e8f0', '#cbd5e1'];
-    for (let i = 0; i < 150; i += 1) {
+    for (let i = 0; i < 260; i += 1) {
       const x = ((i * 137.5) % FIELD.width);
       const y = ((i * 89.3) % FIELD.height);
       b.globalAlpha = 0.25 + ((i * 7) % 10) / 16;
@@ -151,16 +197,19 @@ export function createRenderer(canvas) {
     ctx.drawImage(img, -w / 2, -h / 2, w, h);
     ctx.restore();
   }
-  // Three-layer parallax starfield, driven by game time (deterministic for
+  // Four-layer parallax starfield, driven by game time (deterministic for
   // staged shots): far stars tiny and slow, near stars bigger, brighter and
-  // faster, a few gold. The field drifts downward, so even a still frame
-  // reads as motion. Positions are a fixed hash of the index — no RNG, no
-  // state — so the layers cost nothing and can never desync a replay.
+  // faster, a few gold, the nearest layer with cross glints so the field
+  // sparkles instead of sitting flat. The field drifts downward, so even a
+  // still frame reads as motion. Positions are a fixed hash of the index —
+  // no RNG, no state — so the layers cost nothing and can never desync a
+  // replay.
   function parallax(time) {
     const layers = [
-      { n: 70, r: 1.0, speed: 6, alpha: 0.35 },
-      { n: 40, r: 1.7, speed: 16, alpha: 0.6 },
-      { n: 18, r: 2.6, speed: 30, alpha: 0.9 },
+      { n: 90, r: 1.0, speed: 6, alpha: 0.35 },
+      { n: 55, r: 1.7, speed: 16, alpha: 0.6 },
+      { n: 28, r: 2.6, speed: 30, alpha: 0.9 },
+      { n: 14, r: 3.6, speed: 46, alpha: 1.0 },
     ];
     for (let li = 0; li < layers.length; li += 1) {
       const L = layers[li];
@@ -170,18 +219,30 @@ export function createRenderer(canvas) {
         ctx.globalAlpha = L.alpha * (0.7 + 0.3 * Math.sin(time * 2 + i));
         ctx.fillStyle = i % 9 === 0 ? '#fde68a' : '#e2e8f0';
         ctx.beginPath(); ctx.arc(x, y, L.r, 0, Math.PI * 2); ctx.fill();
+        // Cross glint on every seventh star of the nearest layer.
+        if (li === layers.length - 1 && i % 7 === 0) {
+          ctx.strokeStyle = ctx.fillStyle;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(x - L.r * 2.2, y); ctx.lineTo(x + L.r * 2.2, y);
+          ctx.moveTo(x, y - L.r * 2.2); ctx.lineTo(x, y + L.r * 2.2);
+          ctx.stroke();
+        }
       }
     }
     ctx.globalAlpha = 1;
   }
-  // Hit-flash: a warm glow blooming over a foe the moment a bolt lands.
+  // Hit-flash: a warm glow blooming over a foe the moment a bolt lands, with
+  // a white-hot core — the hit reads as an impact, not a tint.
   function flashOverlay(x, y, r, flash) {
     if (!flash || flash <= 0) return;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = Math.min(1, flash * 6);
     ctx.fillStyle = '#fde68a';
-    ctx.beginPath(); ctx.arc(x, y, r * 1.15, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, r * 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff7d6';
+    ctx.beginPath(); ctx.arc(x, y, r * 0.55, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
   // A keyboard key cap: dark chip, gold edge, mono label. Used on the
@@ -200,7 +261,7 @@ export function createRenderer(canvas) {
     return w;
   }
 
-  // PLAYER — Kenney's orange playerShip1, drawn ~2.4x its collision radius
+  // PLAYER — Kenney's orange playerShip1, drawn ~3x its collision radius
   // (visual only; collision stays at radius 16). A real engine flame flickers
   // behind it, animated from the pack's fire frames.
   function drawShip(x, y, angle, invulnerable, shield, time) {
@@ -213,7 +274,7 @@ export function createRenderer(canvas) {
     const flick = 0.85 + 0.25 * Math.sin(time * 18);
     const flame = sprites.fire[Math.floor(time * 14) % sprites.fire.length];
     ctx.save();
-    ctx.translate(0, 40);
+    ctx.translate(0, 48);
     ctx.rotate(Math.PI);
     ctx.scale(flick, flick);
     ctx.shadowColor = '#fb923c';
@@ -221,15 +282,15 @@ export function createRenderer(canvas) {
     ctx.drawImage(flame, -13, -26, 26, 52);
     ctx.shadowBlur = 0;
     ctx.restore();
-    ctx.drawImage(sprites.player, -39, -29.5, 78, 59);
+    ctx.drawImage(sprites.player, -49, -37, 98, 74);
     ctx.restore();
     if (shield) {
       ctx.globalAlpha = 0.95;
-      ctx.drawImage(sprites.shield, x - 52, y - 42, 104, 84);
+      ctx.drawImage(sprites.shield, x - 65, y - 52, 130, 105);
       ctx.globalAlpha = 1;
       ctx.strokeStyle = 'rgba(251, 191, 36, 0.85)';
       ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(x, y, 42, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, 52, 0, Math.PI * 2); ctx.stroke();
     }
   }
 
@@ -242,7 +303,7 @@ export function createRenderer(canvas) {
     ctx.globalAlpha = 0.65;
     for (let i = 0; i < n; i += 1) {
       const cx = p.x - w / 2 + i * 12 + 4;
-      const cy = p.y + 54;
+      const cy = p.y + 66;
       ctx.beginPath();
       ctx.arc(cx, cy, 4, 0, Math.PI * 2);
       if (i < state.hull) { ctx.fillStyle = '#fbbf24'; ctx.fill(); }
@@ -271,11 +332,20 @@ export function createRenderer(canvas) {
     text(`WAVE ${state.wave} / ${TOTAL_WAVES}`, FIELD.width / 2, 17, 20, '#f8fafc', 'center', 'bold', true);
     const hearts = '♥'.repeat(Math.max(0, state.hull)) + '♡'.repeat(Math.max(0, state.maxHull - state.hull));
     text(hearts, FIELD.width - 24, 17, 20, '#f87171', 'right');
-    // Row 2, left: status chips as plain mono text, gold on black.
+    // Row 2, left: status chips as plain mono text, gold on black. A hot
+    // combo (x5+) earns a bigger, glowing label — the combo should feel earned.
     let lx = 24;
     if (state.combo > 1) {
       const label = `COMBO x${state.combo}`;
-      text(label, lx, 40, 14, '#fbbf24', 'left', 'bold', true);
+      if (state.combo >= 5) {
+        ctx.save();
+        ctx.shadowColor = '#fbbf24';
+        ctx.shadowBlur = 10 + 6 * Math.sin(state.time * 6);
+        text(label, lx, 40, 18, '#fbbf24', 'left', 'bold', true);
+        ctx.restore();
+      } else {
+        text(label, lx, 40, 14, '#fbbf24', 'left', 'bold', true);
+      }
       lx += ctx.measureText(label).width + 20;
     }
     if (state.shield) {
@@ -324,23 +394,23 @@ export function createRenderer(canvas) {
     // SHARDS — Kenney's gold star, pulsing with a warm glow. The only gold
     // star on screen, so it reads instantly as a pickup.
     for (const s of state.shards) {
-      const w = 30 * (1 + 0.12 * Math.sin(s.pulse));
+      const w = 36 * (1 + 0.12 * Math.sin(s.pulse));
       ctx.shadowColor = '#fde68a';
       ctx.shadowBlur = 14;
       ctx.drawImage(sprites.shard, s.x - w / 2, s.y - (w * sprites.shard.height / sprites.shard.width) / 2, w, w * sprites.shard.height / sprites.shard.width);
       ctx.shadowBlur = 0;
     }
     // ASTEROIDS — detailed Kenney grey meteors in four size classes,
-    // rotating as they drift. Drawn a touch wider than the collision circle.
+    // rotating as they drift. Drawn well wider than the collision circle.
     for (const a of state.asteroids) {
-      sprite(meteorFor(a), a.x, a.y, a.rot - Math.PI / 2, a.r * 2.1);
+      sprite(meteorFor(a), a.x, a.y, a.rot - Math.PI / 2, a.r * 2.6);
       flashOverlay(a.x, a.y, a.r, a.flash);
     }
     // DRIFTERS (chasers) — Kenney's red enemy ship, always facing the player.
     // Nothing else on screen is a red ship.
     for (const d of state.drifters) {
       const ang = Math.atan2(state.player.y - d.y, state.player.x - d.x);
-      sprite(sprites.drifter, d.x, d.y, ang, 56);
+      sprite(sprites.drifter, d.x, d.y, ang, 70);
       flashOverlay(d.x, d.y, d.r, d.flash);
     }
     // SPITTERS — Kenney's blue enemy ship tinted gold, a different
@@ -348,21 +418,22 @@ export function createRenderer(canvas) {
     // besides the player's own lantern.
     for (const s of state.spitters) {
       const ang = Math.atan2(state.player.y - s.y, state.player.x - s.x);
-      sprite(sprites.spitter, s.x, s.y, ang, 62);
+      sprite(sprites.spitter, s.x, s.y, ang, 78);
       flashOverlay(s.x, s.y, s.r, s.flash);
     }
     // BOLTS — gold laser bolts along their velocity, so the firing direction
     // reads at a glance.
     for (const b of state.bolts) {
-      sprite(sprites.bolt, b.x, b.y, Math.atan2(b.vy, b.vx), 8);
+      sprite(sprites.bolt, b.x, b.y, Math.atan2(b.vy, b.vx), 10);
     }
     // Enemy orbs — red starburst bolts, small but spiky and unmistakable.
     for (const o of state.orbs) {
-      ctx.drawImage(sprites.orb, o.x - 11, o.y - 11, 22, 22);
+      ctx.drawImage(sprites.orb, o.x - 13, o.y - 13, 26, 26);
     }
     // Particles: sparks glow ('lighter' composite) and smoke swells grey as
     // it fades; engine-trail embers are dimmer and smaller so they read as
-    // exhaust, not explosions.
+    // exhaust, not explosions. Big sparks get a white-hot core, so a kill
+    // burst reads as an explosion with a heart, not a puff of dots.
     for (const pt of state.particles) {
       const a = Math.max(0, pt.life / pt.max);
       const r = pt.grow ? pt.r * (1 + (1 - a) * 1.6) : pt.r;
@@ -375,6 +446,10 @@ export function createRenderer(canvas) {
       }
       ctx.fillStyle = pt.color;
       ctx.beginPath(); ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2); ctx.fill();
+      if (!pt.smoke && !pt.trail && r >= 3.5) {
+        ctx.fillStyle = '#fff7d6';
+        ctx.beginPath(); ctx.arc(pt.x, pt.y, r * 0.45, 0, Math.PI * 2); ctx.fill();
+      }
     }
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
@@ -384,8 +459,8 @@ export function createRenderer(canvas) {
     // volley leaves the ship, so firing reads even in a still frame.
     if (showShip !== false && state.muzzle > 0) {
       const p = state.player;
-      const gx = p.x + Math.cos(p.angle) * 36;
-      const gy = p.y + Math.sin(p.angle) * 36;
+      const gx = p.x + Math.cos(p.angle) * 45;
+      const gy = p.y + Math.sin(p.angle) * 45;
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = state.muzzle / 0.06;
@@ -415,25 +490,37 @@ export function createRenderer(canvas) {
     drawEntities(state, false);
     ctx.fillStyle = 'rgba(10, 12, 16, 0.55)';
     ctx.fillRect(0, 0, FIELD.width, FIELD.height);
-    text('LUMEN DRIFT', FIELD.width / 2, 96, 76, '#fde68a', 'center');
+    // The title glows gold: the poster leads with light, not just letters.
+    ctx.save();
+    ctx.shadowColor = '#f59e0b';
+    ctx.shadowBlur = 26;
+    text('LUMEN DRIFT', FIELD.width / 2, 90, 88, '#fde68a', 'center');
+    ctx.restore();
     // A thin gold rule under the title: the whole screen hangs off it.
     ctx.fillStyle = '#f59e0b';
-    ctx.fillRect(FIELD.width / 2 - 180, 128, 360, 2);
-    text('— Starlight Salvage —', FIELD.width / 2, 156, 30, '#e2e8f0', 'center');
+    ctx.fillRect(FIELD.width / 2 - 200, 124, 400, 2);
+    text('— Starlight Salvage —', FIELD.width / 2, 152, 32, '#e2e8f0', 'center');
     // The ship, showcased: big, centre stage, flame lit, inside a thin
-    // gold ring — the title screen is a poster, and the poster has a hero.
+    // gold ring studded with four small lights — the title screen is a
+    // poster, and the poster has a hero.
     const cx = FIELD.width / 2;
-    const cy = 246;
+    const cy = 238;
     ctx.save();
     ctx.globalAlpha = 0.5;
     ctx.strokeStyle = '#f59e0b';
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(cx, cy, 96, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(cx, cy, 100, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#fde68a';
+    for (let k = 0; k < 4; k += 1) {
+      const a = Math.PI / 4 + (k * Math.PI) / 2;
+      ctx.beginPath(); ctx.arc(cx + Math.cos(a) * 100, cy + Math.sin(a) * 100, 4, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.restore();
     const flick = 0.85 + 0.25 * Math.sin(state.time * 18);
     const flame = sprites.fire[Math.floor(state.time * 14) % sprites.fire.length];
     ctx.save();
-    ctx.translate(cx, cy + 62);
+    ctx.translate(cx, cy + 70);
     ctx.rotate(Math.PI);
     ctx.scale(flick, flick);
     ctx.shadowColor = '#fb923c';
@@ -441,10 +528,10 @@ export function createRenderer(canvas) {
     ctx.drawImage(flame, -13, -26, 26, 52);
     ctx.shadowBlur = 0;
     ctx.restore();
-    ctx.drawImage(sprites.player, cx - 65, cy - 49, 130, 98);
-    panel(FIELD.width / 2 - 330, 356, 660, 148, 'rgba(10, 12, 16, 0.88)');
-    text('Pilot your lantern-ship through the drifting dark.', FIELD.width / 2, 386, 22, '#e2e8f0', 'center');
-    text('Collect star shards, blast drifters, clear 10 waves.', FIELD.width / 2, 416, 22, '#e2e8f0', 'center');
+    ctx.drawImage(sprites.player, cx - 75, cy - 56.5, 150, 113);
+    panel(FIELD.width / 2 - 330, 352, 660, 148, 'rgba(10, 12, 16, 0.88)');
+    text('Pilot your lantern-ship through the drifting dark.', FIELD.width / 2, 382, 22, '#e2e8f0', 'center');
+    text('Collect star shards, blast drifters, clear 10 waves.', FIELD.width / 2, 412, 22, '#e2e8f0', 'center');
     // Controls as real key caps, two rows, centred as a group.
     const row1 = [['WASD', 'fly'], ['MOUSE', 'aim'], ['CLICK / SPACE', 'fire']];
     const row2 = [['Q', 'nova'], ['P', 'pause'], ['M', 'mute']];
@@ -528,8 +615,9 @@ export function createRenderer(canvas) {
       const x = 60 + i * 300;
       panel(x, 356 + rise, 280, 96, 'rgba(10, 12, 16, 0.92)');
       text(label, x + 140, 388 + rise, 15, '#94a3b8', 'center', 'bold', true);
-      text(value, x + 140, 424 + rise, 34, '#fde68a', 'center', 'bold', true);
+      text(value, x + 140, 424 + rise, 36, '#fde68a', 'center', 'bold', true);
     });
+    text(`BEST COMBO  x${state.maxCombo}`, FIELD.width / 2, 482 + rise, 20, '#fbbf24', 'center', 'bold', true);
     ctx.restore();
     text('▶  PRESS SPACE OR CLICK TO PLAY AGAIN', FIELD.width / 2, 512, 28, '#ffffff', 'center');
   }
@@ -561,13 +649,26 @@ export function createRenderer(canvas) {
         ctx.translate(Math.sin(state.time * 91) * 14 * state.shake, Math.cos(state.time * 83) * 14 * state.shake);
       }
       drawEntities(state);
-      // Nova flash: a gold bloom centred on the ship, fading with the timer.
+      // Nova flash: a gold bloom centred on the ship, fading with the timer,
+      // plus an expanding shockwave ring — the Nova reads as a detonation.
       if (state.novaFlash > 0) {
         const g = ctx.createRadialGradient(state.player.x, state.player.y, 0, state.player.x, state.player.y, 420);
         g.addColorStop(0, `rgba(251, 191, 36, ${0.4 * state.novaFlash})`);
         g.addColorStop(1, 'rgba(251, 191, 36, 0)');
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, FIELD.width, FIELD.height);
+        const prog = 1 - state.novaFlash / 0.9;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = (1 - prog) * 0.85;
+        ctx.strokeStyle = '#fde68a';
+        ctx.lineWidth = 6 * (1 - prog) + 1;
+        ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 60 + prog * 380, 0, Math.PI * 2); ctx.stroke();
+        ctx.globalAlpha = (1 - prog) * 0.4;
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 40 + prog * 300, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
       }
       drawHud(state, best);
       if (state.waveBanner > 0) {

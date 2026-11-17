@@ -59,7 +59,11 @@ function frameScore(s) {
   return foes * 3
     + s.shards.length * 2
     + Math.min(s.bolts.length, 10)
-    + Math.min(s.particles.length, 30) * 0.3
+    + Math.min(s.particles.length, 60) * 0.35
+    + (s.particles.length >= 60 ? 12 : 0) // a burst in progress: the frame has fire in it
+    + (s.texts.length >= 3 ? 8 : 0) // several popups at once: the frame has payoff in it
+    + (s.bolts.length >= 12 ? 8 : 0) // bullet-hell beat: the ship is pouring fire out
+    + (s.novaFlash > 0 ? 15 : 0) // caught mid-Nova: the whole screen is answering
     + (s.salvage > 0 ? 20 : 0)
     + (frac >= 0.3 && frac <= 0.9 ? 8 : 0) // mid-wave: progress visible, not just cleared
     + (s.combo >= 2 ? 10 : 0)
@@ -74,9 +78,9 @@ function frameScore(s) {
  * made progress, both enemy kinds are around, shards and bolts are visible,
  * the ship is inside the frame — not parked on an edge or under the HUD —
  * and the frame is DENSE: enough entities on screen at once, plus visible
- * juice — a real particle burst (a kill, not just the engine trail) or a
- * floating score/damage popup. A sparse frame is rejected outright, however
- * well composed it is. */
+ * juice — a real particle burst (a kill, not just the engine trail) or
+ * floating score/damage popups. A sparse frame is rejected outright, however
+ * well composed it is. The bar is high on purpose: a battle, not a stroll. */
 function frameReadable(s) {
   const entities = s.drifters.length + s.spitters.length + s.asteroids.length
     + s.shards.length + s.bolts.length + s.orbs.length;
@@ -84,8 +88,8 @@ function frameReadable(s) {
     && s.drifters.length + s.spitters.length >= 2
     && s.shards.length >= 3
     && s.bolts.length >= 2
-    && entities >= 14
-    && (s.particles.length >= 25 || s.texts.length >= 1)
+    && entities >= 16
+    && (s.particles.length >= 35 || s.texts.length >= 2)
     && s.player.x > 160 && s.player.x < 820
     && s.player.y > 170 && s.player.y < 520;
 }
@@ -157,6 +161,20 @@ export function stageShot(name, world) {
   // back to the best frame overall.
   let best = null;
   let bestAligned = null;
+  // Nova peak (play shot only): one staged detonation. When the run reaches
+  // a late wave (8+) with a Nova in hand, a crowd of foes and the ship in
+  // the power zone, fire it once and sample the next 1.5 s frame by frame.
+  // A peak frame only counts once foes have started coming back (the
+  // respawn lands inside the window while the ring is still up and the
+  // smoke still hangs), so the shot shows a battle mid-detonation, not an
+  // empty field after one. The peak frame competes with the best normal
+  // frame and only wins if it clearly beats it, so a dud Nova can never
+  // steal the shot. End runs never touch this: the trigger is gated on
+  // name === 'play', so the autopilot verification scores are byte-identical
+  // to before.
+  let novaFired = false;
+  let peakUntil = -1;
+  let bestPeak = null;
   function aimAligned(s) {
     if (!s.bolts.length) return false;
     let mx = 0;
@@ -168,7 +186,16 @@ export function stageShot(name, world) {
   }
   for (let i = 0; i < limit / STEP; i += 1) {
     const pilot = autopilot(state, careful);
-    const events = world.step(STEP, pilot.move, true, pilot.aim, false);
+    let useNova = false;
+    if (name === 'play' && !novaFired && state.novas > 0 && state.wave >= 8
+      && state.drifters.length + state.spitters.length >= 5
+      && state.player.x >= 200 && state.player.x <= 560
+      && state.player.y >= 280 && state.player.y <= 480) {
+      useNova = true;
+      novaFired = true;
+      peakUntil = i + 90;
+    }
+    const events = world.step(STEP, pilot.move, true, pilot.aim, useNova);
     if (events & EVENT_OVER) { over = true; break; }
     if (events & EVENT_VICTORY) { victory = true; break; }
     if (events & EVENT_WAVE_CLEAR) {
@@ -176,6 +203,17 @@ export function stageShot(name, world) {
       const choices = world.rollUpgrades();
       world.applyUpgrade(choices[0]);
       world.startWave(state.wave + 1);
+    }
+    if (name === 'play' && i <= peakUntil && peakUntil >= 0
+      && state.drifters.length + state.spitters.length >= 1
+      && state.particles.length >= 40
+      && state.player.x > 160 && state.player.x < 820
+      && state.player.y > 170 && state.player.y < 520) {
+      const peakScore = frameScore(state)
+        + Math.min(state.particles.length, 150) * 0.4
+        + (state.novaFlash > 0 ? 100 : 0)
+        + state.texts.length * 6;
+      if (!bestPeak || peakScore > bestPeak.score) bestPeak = { score: peakScore, snap: structuredClone(state) };
     }
     if (name === 'play' && i % SAMPLE_STEPS === 0 && frameReadable(state)) {
       const score = frameScore(state);
@@ -190,7 +228,10 @@ export function stageShot(name, world) {
     state.texts = []; // no stray "+400" ghosting over the stats line
     return { screen: SCREEN_OVER, best: state.score };
   }
-  const chosen = bestAligned ?? best;
+  const normalBest = bestAligned ?? best;
+  const chosen = (bestPeak && bestPeak.score > (normalBest?.score ?? 0) + 10)
+    ? bestPeak
+    : normalBest;
   if (chosen) {
     // Restore the chosen frame in place (same object the renderer reads).
     for (const k of Object.keys(state)) delete state[k];

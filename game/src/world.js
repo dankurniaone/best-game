@@ -32,7 +32,7 @@ export function createWorld(random) {
     particles: [], texts: [], stars: [],
     // Juice state — visual only, never read by any rule or collision:
     // muzzle flash timer, screen-shake timer, nova flash timer.
-    muzzle: 0, shake: 0, novaFlash: 0,
+    muzzle: 0, shake: 0, novaFlash: 0, maxCombo: 0,
     shardTimer: 0, spawnQueue: [], time: 0, kills: 0, shardsCollected: 0,
     waveBanner: 0,
   };
@@ -80,12 +80,14 @@ export function createWorld(random) {
     }
   }
   // A kill reads as an explosion, not a pop: the stock burst plus a wide
-  // gold/orange spark fan and a few slow smoke puffs.
+  // gold/orange spark fan and a few slow smoke puffs — bigger and longer
+  // than the last pass, so a kill still burns in the frame a quarter second
+  // later when the screenshot picker samples it.
   function killBurst(x, y) {
-    vfxBurst(x, y, '#fbbf24', 18, 60, 320, 0.4, 0.9, 2, 5);
-    vfxBurst(x, y, '#f97316', 10, 40, 220, 0.3, 0.7, 2, 4);
-    vfxBurst(x, y, '#fde68a', 8, 120, 380, 0.2, 0.5, 1, 2.5);
-    vfxBurst(x, y, '#64748b', 5, 8, 40, 0.6, 1.1, 4, 8, true);
+    vfxBurst(x, y, '#fbbf24', 24, 80, 380, 0.5, 1.1, 2.5, 6);
+    vfxBurst(x, y, '#f97316', 14, 50, 260, 0.4, 0.9, 2.5, 5);
+    vfxBurst(x, y, '#fde68a', 10, 140, 420, 0.25, 0.6, 1.5, 3);
+    vfxBurst(x, y, '#64748b', 6, 8, 40, 0.6, 1.1, 5, 9, true);
   }
   function floatText(x, y, text, color, size) {
     // Stack floats apart: rapid pickups (+400, +400, +400) must never print
@@ -122,7 +124,7 @@ export function createWorld(random) {
     state.player.x = FIELD.width / 2; state.player.y = FIELD.height - 90; state.player.invulnerable = 0; state.player.fireTimer = 0;
     state.shards = []; state.asteroids = []; state.drifters = []; state.spitters = [];
     state.bolts = []; state.orbs = []; state.particles = []; state.texts = [];
-    state.muzzle = 0; state.shake = 0; state.novaFlash = 0;
+    state.muzzle = 0; state.shake = 0; state.novaFlash = 0; state.maxCombo = 0;
     makeStars();
     startWave(1);
   }
@@ -141,6 +143,7 @@ export function createWorld(random) {
 
   function collectShard(shard) {
     state.combo = Math.min(SHARD.maxCombo, state.combo + 1);
+    state.maxCombo = Math.max(state.maxCombo, state.combo);
     state.comboTimer = SHARD.comboWindow;
     const gained = SHARD.baseScore * state.combo;
     state.score += gained;
@@ -155,14 +158,14 @@ export function createWorld(random) {
   function fireNova() {
     if (state.novas <= 0) return 0;
     state.novas -= 1;
-    state.shake = 0.45; state.novaFlash = 0.5; // the whole screen answers
+    state.shake = 0.45; state.novaFlash = 0.9; // the whole screen answers, for almost a second
     for (const d of state.drifters) { state.score += DRIFTER.score; state.kills += 1; state.salvage += 1; burst(d.x, d.y, '#fbbf24', 16); killBurst(d.x, d.y); }
     for (const s of state.spitters) { state.score += SPITTER.score; state.kills += 1; state.salvage += 1; burst(s.x, s.y, '#fbbf24', 16); killBurst(s.x, s.y); }
     for (const a of state.asteroids) burst(a.x, a.y, '#e2e8f0', 10);
     state.drifters = []; state.spitters = []; state.asteroids = []; state.orbs = [];
     burst(state.player.x, state.player.y, '#fbbf24', 40);
     killBurst(state.player.x, state.player.y);
-    floatText(state.player.x, state.player.y - 30, 'NOVA!', '#fde68a');
+    floatText(state.player.x, state.player.y - 60, 'NOVA!', '#fde68a');
     return EVENT_KILL;
   }
 
