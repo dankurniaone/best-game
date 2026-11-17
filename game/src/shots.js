@@ -138,12 +138,13 @@ function autopilot(state, careful) {
       my -= ((threat.y - p.y) / (d || 1)) * 1.6;
     }
   }
-  // Composition pull (play staging only — the end shot must keep the
-  // original autopilot or its staged run dies too early): a gentle nudge
-  // away from the very edges so the picked frame is balanced, not a ship
-  // glued to a corner with an empty half-frame behind it. Small on purpose
-  // (0.45): the picker itself rejects edge frames, and a strong pull fights
-  // the shard-seeking and gets the staged ship killed early.
+  // Composition pull (staging only — the end run uses it too while it
+  // plays carefully; it goes away with the reckless switch at wave 9):
+  // a gentle nudge away from the very edges so the picked frame is
+  // balanced, not a ship glued to a corner with an empty half-frame
+  // behind it. Small on purpose (0.45): the picker itself rejects edge
+  // frames, and a strong pull fights the shard-seeking and gets the
+  // staged ship killed early.
   if (careful) {
     if (p.x < 170) mx += 0.45;
     if (p.x > 790) mx -= 0.45;
@@ -163,14 +164,27 @@ export function stageShot(name, world) {
     state.texts = []; // no stray "+50" peeking out from behind the title panel
     return { screen: SCREEN_TITLE, best: 0 };
   }
-  const careful = name === 'play';
+  // End shot: a HEROIC late defeat, not an early one. The old staging
+  // flew the original reckless autopilot from wave 1 and died in wave 3
+  // with score 11,650 — next to a play shot of wave 8 / 60,250 it read as
+  // a run that barely started. The run now plays CAREFULLY (same
+  // threat-dodging autopilot as the play shot) until wave 9, then goes
+  // reckless: late-wave density kills a careless ship fast, so the death
+  // lands in wave 9–10 with a high score instead of wave 3. Measured
+  // across seeds 1–12 (switch at 9): deaths in wave 9–10 on 8 seeds,
+  // victories on 4; seed 11 dies in wave 10 with score 85,150, 82 foes,
+  // 203 shards, max combo x8 — the pinned seed in shots.json. The switch
+  // is staging only: it never touches world.js, so gameplay and the
+  // autopilot verification scores are unchanged.
+  const END_RECKLESS_WAVE = 9;
   const limit = name === 'end' ? END_LIMIT_SECONDS : PLAY_LIMIT_SECONDS;
   let over = false;
   let victory = false;
   // Play shot: scan the run and keep the most readable, action-packed frame
   // (a fixed timestamp kept landing on a fresh wave with salvage 0/20 and an
   // empty field). The seed makes the scan deterministic, so the frame is
-  // reproducible. End shot: play until the run ends, as before.
+  // reproducible. End shot: play carefully to wave 9, then recklessly
+  // until the run ends (see END_RECKLESS_WAVE above).
   // Prefer frames where the ship faces the way it fires: a busy frame where
   // the ship just turned away from its own bolts reads as if it shoots
   // backwards, however high it scores. If no aligned frame exists, fall
@@ -216,6 +230,9 @@ export function stageShot(name, world) {
     return dot > 0.5;
   }
   for (let i = 0; i < limit / STEP; i += 1) {
+    // Careful is decided per step: the end run switches from careful to
+    // reckless the moment it reaches END_RECKLESS_WAVE (see above).
+    const careful = name === 'play' || (name === 'end' && state.wave < END_RECKLESS_WAVE);
     const pilot = autopilot(state, careful);
     let useNova = false;
     if (name === 'play' && !novaFired && state.novas > 0 && state.wave >= 8
